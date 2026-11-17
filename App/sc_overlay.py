@@ -294,6 +294,8 @@ class Overlay:
             game = self.game_window() if self.game_window else None
             r = stack_report(_hwnd(self.win), game)
             r["alpha"] = self.opacity if self.visible else 0.0
+            r["avatar"] = self.avatar.report() if self.avatar is not None else \
+                ("switched off in Settings" if not self.get_settings().get("avatar_on", True) else "not built")
             return r
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}

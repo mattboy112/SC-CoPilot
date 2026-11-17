@@ -141,6 +141,8 @@ class Avatar:
         self.model = AvatarModel(self.size, bg)
         self.canvas = tk.Canvas(parent, width=self.size, height=self.size, bg=bg, highlightthickness=0, bd=0)
         self.job = None
+        self.error = ""
+        self.frames = 0
         self.t0 = time.time()
         self.front = []
         cv = self.canvas
@@ -201,9 +203,21 @@ class Avatar:
             mode, level = "idle", 0.0
         try:
             self.draw(self.model.step(time.time() - self.t0, mode, level))
-        except tk.TclError:
+            self.frames += 1
+        except tk.TclError as e:
+            self.error = f"TclError: {e}"
             return
+        except Exception as e:
+            self.error = f"{type(e).__name__}: {e}"
         self.job = self.canvas.after(int(1000 / (self.fps if mode != "idle" else max(12, self.fps * 2 // 3))), self.tick)
+
+    def report(self):
+        cv = self.canvas
+        try:
+            shown, w = bool(cv.winfo_ismapped()), cv.winfo_width()
+        except tk.TclError:
+            shown, w = False, 0
+        return {"shown": shown, "px": w, "running": self.job is not None, "frames": self.frames, "error": self.error}
 
     def start(self):
         if self.job is None:
