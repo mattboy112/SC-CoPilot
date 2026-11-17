@@ -48,7 +48,7 @@ The AI is optional. Everything above except answering questions works without it
 - **Windows voices**: built in, instant, offline, more robotic.
 - **Kokoro**: very natural and fully offline. Available when you run from source. It isn't in the installer yet.
 
-Every voice can run through an effect: cockpit AI, ship computer, helmet comms or long-range radio.
+Every voice can run through an effect: cockpit AI, ship computer, helmet comms, long-range radio, deep and dark, or echo chamber. A Pitch slider makes any voice deeper or lighter.
 
 ## Tips
 

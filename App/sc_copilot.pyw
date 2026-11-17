@@ -76,7 +76,7 @@ DEFAULTS = {
     "tts_rate": 0, "volume": 90, "chirps": True, "speak_answers": True, "instant_commands": True, "web_lookups": True,
     "pilot_notes": "", "ptt": {"kind": "key", "vk": 0x05, "name": "Mouse 4"}, "mic": None, "stt_model": "base.en",
     "stt_device": "cpu", "callouts": {c: True for c, _ in CO.CATEGORIES}, "install_dir": "", "geometry": "", "tab": "overview",
-    "kokoro_voice": V.KOKORO_DEFAULT, "voice_fx": "computer", "voice_fx_amount": 100, "macros": MAC.defaults(),
+    "kokoro_voice": V.KOKORO_DEFAULT, "voice_fx": "computer", "voice_fx_amount": 100, "voice_pitch": 0, "macros": MAC.defaults(),
     "overlay_on": False, "overlay_corner": "top_right", "overlay_scale": 100, "overlay_opacity": 82, "overlay_only_in_game": True,
     "overlay_callout_secs": 8, "trade_system": "auto", "run_as_admin": False,
     "ai_mode": "own_key", "license_key": "", "check_updates": True, "last_update_check": 0, "setup_done": False,
@@ -1068,11 +1068,15 @@ class App:
         chooser(rt, self.edge_voices, s.get("voice"), lambda v: (self.set_and_save("voice", v), self.preview_voice()), 34).pack(side="left")
         FlatButton(rt, "Refresh list", lambda: threading.Thread(target=self.refresh_edge_voices, daemon=True).start(), "normal",
                    font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(px(8), 0))
-        rt = self.srow(c, "Voice effect", "Makes it sound like it's coming through your ship or helmet. Works with Kokoro and Microsoft voices.")
+        rt = self.srow(c, "Voice effect", "How it sounds: through your ship or helmet, deep and dark, or in an echo chamber. Works with Kokoro and Microsoft voices.")
         chooser(rt, FX.PRESETS, s.get("voice_fx", "computer"), lambda v: (self.set_and_save("voice_fx", v), self.preview_voice()), 26).pack(side="left")
         FlatButton(rt, "Test voice", self.preview_voice, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(px(8), 0))
         rt = self.srow(c, "Effect amount")
         slider(rt, 0, 100, s.get("voice_fx_amount", 100), lambda v: self.set_and_save("voice_fx_amount", int(float(v)))).pack(side="left")
+        rt = self.srow(c, "Pitch", "Lower is deeper, higher is lighter. Works with any effect, even Off. Not for the Windows voices.")
+        slider(rt, FX.PITCH_RANGE[0], FX.PITCH_RANGE[1], s.get("voice_pitch", 0),
+               lambda v: self.set_and_save("voice_pitch", int(float(v)))).pack(side="left")
+        FlatButton(rt, "Test", self.preview_voice, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(px(8), 0))
         rt = self.srow(c, "Speed")
         slider(rt, -30, 30, s.get("tts_rate", 0), lambda v: self.set_and_save("tts_rate", int(float(v)))).pack(side="left")
         rt = self.srow(c, "Volume")

@@ -6,7 +6,11 @@ PRESETS = [
     ("computer", "Ship computer"),
     ("helmet", "Helmet comms"),
     ("radio", "Long-range radio"),
+    ("deep", "Deep and dark"),
+    ("echo", "Echo chamber"),
 ]
+
+PITCH_RANGE = (-8, 8)
 
 
 def _next_pow2(n):
@@ -70,6 +74,78 @@ def squelch(sr, ms=70, level=0.25, seed=3):
     return np.concatenate([click, burst]).astype(np.float32)
 
 
+def stretch(x, sr, factor):
+    """Make audio longer (factor > 1) or shorter without changing its pitch.
+
+    Cuts it into short overlapping slices and lays them down at a different spacing. Each slice is
+    nudged a few milliseconds to wherever it lines up best with the previous one (WSOLA), which keeps
+    the voice smooth instead of buzzy.
+    """
+    x = np.asarray(x, dtype=np.float32)
+    if abs(factor - 1.0) < 1e-3 or len(x) < sr // 20:
+        return x
+    win = int(sr * 0.025) & ~1
+    hop = win // 2
+    tol = int(sr * 0.008)
+    w = np.hanning(win).astype(np.float32)
+    n_out = int(len(x) * factor)
+    xp = np.concatenate([np.zeros(tol, np.float32), x, np.zeros(win * 2 + tol * 2, np.float32)])
+    out = np.zeros(n_out + win * 2, np.float32)
+    norm = np.zeros_like(out)
+    hop_in = hop / factor
+    pos, k, nxt = 0, 0, None
+    while pos < n_out:
+        centre = int(round(k * hop_in)) + tol
+        if centre + win + tol >= len(xp):
+            break
+        if nxt is None:
+            start = centre
+        else:
+            lo = max(0, centre - tol)
+            region = xp[lo:centre + tol + win]
+            start = lo + int(np.argmax(np.correlate(region, nxt, mode="valid")))
+        seg = xp[start:start + win]
+        out[pos:pos + win] += seg * w
+        norm[pos:pos + win] += w
+        nxt = xp[start + hop:start + hop + win]
+        pos += hop
+        k += 1
+    norm[norm < 1e-3] = 1.0
+    return (out / norm)[:n_out].astype(np.float32)
+
+
+def resample(x, ratio):
+    """Play audio ratio times faster (shorter and higher) or slower, by interpolation."""
+    idx = np.arange(0, len(x) - 1, ratio)
+    return np.interp(idx, np.arange(len(x)), x).astype(np.float32)
+
+
+def pitch(x, sr, semitones):
+    """Raise or lower the pitch, keeping the same speed. 12 semitones = one octave."""
+    x = np.asarray(x, dtype=np.float32)
+    if abs(semitones) < 0.05 or len(x) == 0:
+        return x
+    r = 2 ** (semitones / 12.0)
+    y = stretch(x, sr, r)
+    if r > 1:
+        cut = sr / 2 / r
+        y = eq(y, sr, [(20, 0), (cut * 0.85, 0), (cut, -40), (sr / 2, -60)])
+    y = resample(y, r)
+    if len(y) >= len(x):
+        return y[:len(x)]
+    return np.concatenate([y, np.zeros(len(x) - len(y), np.float32)])
+
+
+def fade_tail(x, sr, keep, fade=0.25):
+    """Cut a long echo tail down to `keep` seconds after the voice, fading out smoothly."""
+    n = min(len(x), keep)
+    y = x[:n].copy()
+    f = min(n, int(sr * fade))
+    if f > 0:
+        y[-f:] *= np.linspace(1, 0, f, dtype=np.float32) ** 2
+    return y
+
+
 def normalize(x, peak=0.89):
     m = float(np.max(np.abs(x))) if len(x) else 0.0
     return (x * (peak / m)).astype(np.float32) if m > 1e-6 else x
@@ -111,12 +187,32 @@ def _fx(x, sr, preset):
         hiss = eq(rng.standard_normal(len(y)).astype(np.float32) * 0.02, sr, [(400, -20), (1500, 0), (3500, -15)])
         sq = squelch(sr, 80, 0.3)
         return np.concatenate([sq, y + hiss, squelch(sr, 110, 0.35, seed=9)])
+    if preset == "deep":
+        y = pitch(x, sr, -4)
+        sub = pitch(x, sr, -12)
+        y = normalize(y) + normalize(sub) * 0.16
+        y = eq(y, sr, [(35, -14), (80, 3), (160, 4), (350, 0), (1200, -2), (3000, 0.5), (6000, -4), (10000, -14)])
+        y = saturate(normalize(y), 1.7)
+        ir = room_ir(sr, 0.7, 0.8, seed=13, early=((9, 0.3), (17, 0.22), (29, 0.15)))
+        wet = eq(convolve(y, ir), sr, [(60, -10), (150, 0), (1500, -6), (4000, -20)])
+        y = pad(y, sr, after=(len(wet) - len(y)) / sr)
+        return fade_tail(y * 0.9 + wet * 0.2, sr, len(x) + int(sr * 0.6))
+    if preset == "echo":
+        y = eq(x, sr, [(70, -14), (180, 0), (3500, 0.5), (9000, -5)])
+        taps = ((180, 0.55), (360, 0.36), (540, 0.24), (720, 0.15), (900, 0.09))
+        ir = room_ir(sr, 1.9, 1.0, seed=21, early=((23, 0.4), (41, 0.32), (67, 0.25), (97, 0.18)) + taps)
+        wet = eq(convolve(y, ir), sr, [(100, -8), (300, 0), (2500, -2), (5000, -10), (9000, -24)])
+        y = pad(y, sr, after=(len(wet) - len(y)) / sr)
+        return fade_tail(y * 0.72 + wet * 0.55, sr, len(x) + int(sr * 1.4), fade=0.5)
     return x
 
 
-def apply(x, sr, preset="off", amount=1.0):
-    """Process mono float32 audio. amount 0..1 blends the dry voice with the effect."""
+def apply(x, sr, preset="off", amount=1.0, semitones=0):
+    """Process mono float32 audio. amount 0..1 blends the dry voice with the effect; semitones shifts the pitch."""
     x = np.asarray(x, dtype=np.float32).reshape(-1)
+    if semitones and len(x):
+        lo, hi = PITCH_RANGE
+        x = pitch(normalize(x), sr, max(lo, min(hi, float(semitones))))
     if preset in (None, "", "off") or amount <= 0 or len(x) == 0:
         return normalize(x)
     x = normalize(x)

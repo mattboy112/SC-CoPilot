@@ -670,15 +670,19 @@ class Speaker(threading.Thread):
         return e if e in ("kokoro", "neural", "sapi") else "neural"
 
     def _fx(self, s):
+        if np is None or FX is None:
+            return "off", 0.0, 0
         p = s.get("voice_fx", "off")
         amt = max(0, min(100, int(s.get("voice_fx_amount", 100)))) / 100.0
-        return (p, amt) if p != "off" and amt > 0 and np is not None and FX is not None else ("off", 0.0)
+        lo, hi = FX.PITCH_RANGE
+        semi = max(lo, min(hi, int(s.get("voice_pitch", 0) or 0)))
+        return ((p, amt) if p != "off" and amt > 0 else ("off", 0.0)) + (semi,)
 
     def _key(self, text, s, engine=None):
         engine = engine or self._engine(s)
         voice = s.get("kokoro_voice", KOKORO_DEFAULT) if engine == "kokoro" else s.get("voice", VOICES[0][0])
-        fx, amt = self._fx(s)
-        raw = f"{engine}|{voice}|{int(s.get('tts_rate', 0))}|{fx}|{amt:.2f}|{text}"
+        fx, amt, semi = self._fx(s)
+        raw = f"{engine}|{voice}|{int(s.get('tts_rate', 0))}|{fx}|{amt:.2f}|{text}" + (f"|p{semi}" if semi else "")
         return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
     def _cached(self, text, s):
@@ -690,8 +694,8 @@ class Speaker(threading.Thread):
         return None
 
     def _finish(self, audio, sr, s, key):
-        fx, amt = self._fx(s)
-        out = FX.apply(audio, sr, fx, amt) if FX is not None else audio
+        fx, amt, semi = self._fx(s)
+        out = FX.apply(audio, sr, fx, amt, semi) if FX is not None else audio
         path = self.cache / (key + ".wav")
         part = path.with_name(path.stem + f".{threading.get_ident()}.part")
         write_wav(part, out, sr)
@@ -723,8 +727,8 @@ class Speaker(threading.Thread):
             except OSError:
                 pass
             return None
-        fx, _ = self._fx(s)
-        if fx != "off":
+        fx, _, semi = self._fx(s)
+        if fx != "off" or semi:
             try:
                 audio, sr = decode_mp3(part)
                 path = self._finish(audio, sr, s, key)
