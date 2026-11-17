@@ -1,0 +1,35 @@
+{
+  "sc_copilot_packs": 1,
+  "packs": [
+    {
+      "id": "noir-detective",
+      "name": "Noir Detective",
+      "author": "mattboy112",
+      "description": "Hard-boiled narration for every jump, kill and contract. The rain is optional.",
+      "personality": "standard",
+      "lines": 12,
+      "added": "2026-11-17",
+      "file": "packs/noir-detective.json"
+    },
+    {
+      "id": "knight-errant",
+      "name": "Knight Errant",
+      "author": "mattboy112",
+      "description": "Your ship is a steed and you are its sworn knight. Chivalry, honor, and very formal flares.",
+      "personality": "standard",
+      "lines": 15,
+      "added": "2026-11-17",
+      "file": "packs/knight-errant.json"
+    },
+    {
+      "id": "arcade-announcer",
+      "name": "Arcade Announcer",
+      "author": "mattboy112",
+      "description": "Big, loud, coin-op energy. Every kill is a high score.",
+      "personality": "standard",
+      "lines": 13,
+      "added": "2026-11-17",
+      "file": "packs/arcade-announcer.json"
+    }
+  ]
+}

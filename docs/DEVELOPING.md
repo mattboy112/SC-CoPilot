@@ -30,6 +30,14 @@ Settings, logs and caches go to `%APPDATA%\SC Co-Pilot` and `%LOCALAPPDATA%\SC C
 | `App/legal/` | License, third-party notices, privacy (shipped inside the app) |
 | `packaging/` | PyInstaller spec, Inno Setup script, build requirements, release helpers |
 | `.github/workflows/build.yml` | Builds and tests the installer on every push; publishes a release for `v*` tags |
+| `.github/workflows/pages.yml` | Publishes the website (`docs/site` plus `packs/`) to GitHub Pages |
+| `.github/workflows/packs.yml` | Adds a community line pack when a maintainer labels its issue `pack-approved` |
+| `App/sc_lines.py` | Every spoken line, the personalities, and line-pack import/export |
+| `App/sc_hud.py` | Target reader: screen capture and shield/hull measurement |
+| `App/brand/` | `logo.svg` (the current logo) and `options/` (the other designs) |
+| `packs/` | Community line packs and their `index.json` |
+| `docs/site/` | The website |
+| `tests/` | pytest tests, run on every build |
 
 ## How it works
 
@@ -53,6 +61,10 @@ pyinstaller --noconfirm --clean packaging/sc_copilot.spec --distpath dist --work
 ```
 
 The installer ends up in `dist/`. Set `SC_INCLUDE_KOKORO=1` before running PyInstaller to bundle Kokoro, but read the licensing note below first.
+
+## Changing the logo
+
+Edit `App/brand/logo.svg` (or pick one from `App/brand/options/`), then run `python packaging/make_icons.py` (or `python packaging/make_icons.py h_vector`). It rebuilds the app icon, the `.ico` used by the `.exe` and installer, and the website icons. It needs `rsvg-convert` and Pillow.
 
 ## Releasing a new version
 

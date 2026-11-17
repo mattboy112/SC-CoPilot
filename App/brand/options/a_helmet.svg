@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e1e2c"/>
+      <stop offset="1" stop-color="#06101a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#38c6f4" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#38c6f4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4f7fa"/>
+      <stop offset="0.6" stop-color="#c2cfd9"/>
+      <stop offset="1" stop-color="#7f93a4"/>
+    </linearGradient>
+    <linearGradient id="ear" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4b6072"/>
+      <stop offset="1" stop-color="#2a3a48"/>
+    </linearGradient>
+    <linearGradient id="visor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c2433"/>
+      <stop offset="1" stop-color="#030a10"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a6f1ff"/>
+      <stop offset="1" stop-color="#1aa3dd"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#tile)"/>
+  <rect x="19" y="19" width="474" height="474" rx="105" fill="none" stroke="#1f4d66" stroke-width="6"/>
+  <circle cx="256" cy="262" r="210" fill="url(#glow)"/>
+  <rect x="78" y="226" width="64" height="112" rx="32" fill="url(#ear)" stroke="#1b2833" stroke-width="5"/>
+  <rect x="370" y="226" width="64" height="112" rx="32" fill="url(#ear)" stroke="#1b2833" stroke-width="5"/>
+  <circle cx="110" cy="282" r="11" fill="#38c6f4"/>
+  <circle cx="402" cy="282" r="11" fill="#38c6f4"/>
+  <path d="M132 392 C112 350 108 300 114 266 C126 168 186 114 256 114 C326 114 386 168 398 266 C404 300 400 350 380 392 C336 420 176 420 132 392 Z"
+        fill="url(#shell)" stroke="#5a7084" stroke-width="5"/>
+  <path d="M168 376 C212 394 300 394 344 376" fill="none" stroke="#6c8294" stroke-width="8" stroke-linecap="round"/>
+  <rect x="142" y="198" width="228" height="116" rx="58" fill="url(#visor)" stroke="#38c6f4" stroke-width="8"/>
+  <g fill="url(#wave)">
+    <rect x="183" y="247" width="14" height="22" rx="7"/>
+    <rect x="209" y="232" width="14" height="52" rx="7"/>
+    <rect x="235" y="216" width="14" height="84" rx="7"/>
+    <rect x="261" y="226" width="14" height="64" rx="7"/>
+    <rect x="287" y="216" width="14" height="84" rx="7"/>
+    <rect x="313" y="236" width="14" height="44" rx="7"/>
+  </g>
+  <path d="M168 222 C184 210 204 205 226 205" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round"/>
+</svg>

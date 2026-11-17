@@ -1,0 +1,23 @@
+{
+  "sc_copilot_lines": 1,
+  "name": "Noir Detective",
+  "author": "mattboy112",
+  "description": "Hard-boiled narration for every jump, kill and contract. The rain is optional.",
+  "personality": "standard",
+  "added": "2026-11-17",
+  "issue": 0,
+  "lines": {
+    "arm_on": "Armistice. The kind of quiet that makes you nervous.",
+    "arm_off": "Out of armistice. The city doesn't sleep, and neither do the guns.",
+    "juris_ungoverned": "No law out here. Just people and their bad decisions.",
+    "qt_arrived": "We made it. The question was always what was waiting.",
+    "kill_first": "The {victim} went down. They usually do.",
+    "kill_n": "Another {victim} down. That's {n}. Nobody's counting but me.",
+    "ship_lost": "The {victim} was a good ship. Good ships don't last.",
+    "contract_accepted": "A new case landed on my desk. {name}",
+    "contract_complete": "Case closed. {name}",
+    "contract_failed": "The case went cold. {name}",
+    "greeting": "Co-pilot's on. Coffee's black. Let's go to work.",
+    "ack.lights_off": "Lights off. Some things look better in the dark."
+  }
+}

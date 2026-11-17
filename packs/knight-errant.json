@@ -1,0 +1,26 @@
+{
+  "sc_copilot_lines": 1,
+  "name": "Knight Errant",
+  "author": "mattboy112",
+  "description": "Your ship is a steed and you are its sworn knight. Chivalry, honor, and very formal flares.",
+  "personality": "standard",
+  "added": "2026-11-17",
+  "issue": 0,
+  "lines": {
+    "arm_on": "We enter the king's peace. Blades sheathed, my liege.",
+    "arm_off": "We leave the king's peace. Draw steel.",
+    "juris_ungoverned": "Lawless lands. Keep thy guard up.",
+    "qt_arrived": "We have arrived, my liege.",
+    "kill_first": "The {victim} is vanquished!",
+    "kill_n": "The {victim} falls! {n} foes bested this day.",
+    "ship_lost": "Alas, our noble {victim} is lost.",
+    "downed": "You are wounded, sire! Call for aid!",
+    "target_shields_down": "Their shield is broken! Strike now!",
+    "contract_accepted": "A new quest! {name}",
+    "contract_complete": "The quest is fulfilled. {name}",
+    "greeting": "Your squire stands ready, my liege.",
+    "ack.gear_down": "The landing legs are lowered.",
+    "ack.shields_on": "Shields raised, my liege.",
+    "ack.decoys": "Flares loosed!"
+  }
+}

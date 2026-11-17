@@ -14,5 +14,7 @@ First public release.
 - Reads your own keybinds and can give spare keys to actions Star Citizen leaves unbound, without touching your own binds. Detects and repairs key clashes.
 - Personalities: six original co-pilot characters, plus a line editor to rewrite any callout or reply, with random variants and shareable line packs.
 - Target reader (beta): reads your target's shield and hull off the HUD from boxes you draw once, answers "target status" / "are his shields down?", and can call out when shields drop.
+- Community line-pack gallery: browse, preview and install packs in the app; share yours through a GitHub form.
+- New logo.
 - First-run setup, automatic updates, Copy diagnostics for bug reports.
 - 169 automated tests run on every build.

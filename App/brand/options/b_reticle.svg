@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0e1e2c"/><stop offset="1" stop-color="#06101a"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#38c6f4" stop-opacity="0.30"/><stop offset="1" stop-color="#38c6f4" stop-opacity="0"/></radialGradient>
+<linearGradient id="cyan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a6f1ff"/><stop offset="1" stop-color="#1aa3dd"/></linearGradient>
+<linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f7fa"/><stop offset="1" stop-color="#8ea2b2"/></linearGradient></defs><rect x="16" y="16" width="480" height="480" rx="108" fill="url(#tile)"/><rect x="19" y="19" width="474" height="474" rx="105" fill="none" stroke="#1f4d66" stroke-width="6"/>
+<circle cx="256" cy="256" r="205" fill="url(#glow)"/>
+<circle cx="256" cy="256" r="160" fill="none" stroke="#38c6f4" stroke-width="18" stroke-dasharray="190 61.3" stroke-dashoffset="-30.6" stroke-linecap="round"/>
+<g stroke="#38c6f4" stroke-width="12" stroke-linecap="round"><line x1="256" y1="74" x2="256" y2="110"/><line x1="256" y1="402" x2="256" y2="438"/><line x1="74" y1="256" x2="110" y2="256"/><line x1="402" y1="256" x2="438" y2="256"/></g>
+<path d="M256 140 L342 344 L256 304 L170 344 Z" fill="url(#silver)" stroke="#5a7084" stroke-width="5" stroke-linejoin="round"/>
+<path d="M256 196 L298 300 L256 282 L214 300 Z" fill="#0b1a26"/>
+<g fill="url(#cyan)"><rect x="231" y="244" width="10" height="26" rx="5"/><rect x="251" y="230" width="10" height="44" rx="5"/><rect x="271" y="244" width="10" height="26" rx="5"/></g>
+</svg>

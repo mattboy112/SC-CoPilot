@@ -1,0 +1,24 @@
+{
+  "sc_copilot_lines": 1,
+  "name": "Arcade Announcer",
+  "author": "mattboy112",
+  "description": "Big, loud, coin-op energy. Every kill is a high score.",
+  "personality": "standard",
+  "added": "2026-11-17",
+  "issue": 0,
+  "lines": {
+    "arm_on": "Safe zone! Weapons offline!",
+    "arm_off": "Weapons free! Here we go!",
+    "qt_arrived": "Stage clear!",
+    "kill_first": "{victim} down! Nice shot!",
+    "kill_n": "Combo! {victim} down! That's {n}!",
+    "ship_lost": "Ship lost! Insert another coin!",
+    "downed": "You're down! Continue? Ten, nine, eight...",
+    "target_shields_down": "Shields broken! Go go go!",
+    "contract_accepted": "New mission! {name}",
+    "contract_complete": "Mission complete! Bonus round! {name}",
+    "greeting": "Player one, ready!",
+    "ack.decoys": "Flares! Evasive!",
+    "ack.max_weapons": "Power up! Weapons maxed!"
+  }
+}

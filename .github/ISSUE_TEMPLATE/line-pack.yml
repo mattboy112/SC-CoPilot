@@ -1,0 +1,41 @@
+name: Share a line pack
+description: Share your SC Co-Pilot lines so other players can install them.
+title: "Line pack: "
+labels: ["line-pack"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing! In SC Co-Pilot, go to **Personality → Export my lines…**, then paste the whole file below.
+        A maintainer checks every pack before it goes up. See the [rules](https://github.com/mattboy112/SC-CoPilot/tree/main/packs#rules).
+  - type: input
+    id: name
+    attributes:
+      label: Pack name
+      description: 3 to 40 characters.
+      placeholder: Grizzled Bounty Hunter
+    validations:
+      required: true
+  - type: input
+    id: description
+    attributes:
+      label: Description
+      description: One line, up to 160 characters. What does it sound like?
+    validations:
+      required: true
+  - type: textarea
+    id: pack
+    attributes:
+      label: Pack file (paste the exported JSON)
+      render: json
+    validations:
+      required: true
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Rules
+      options:
+        - label: I wrote these lines myself (no quotes or catchphrases from movies, shows, games or other people's work).
+          required: true
+        - label: No real-person impersonation, slurs, hate, sexual content, links or ads.
+          required: true

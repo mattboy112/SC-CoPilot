@@ -8,7 +8,7 @@ Hold push-to-talk and say "gear down", "combat ready" or "target the biggest thr
 
 ## Download
 
-**[Get the latest installer →](https://github.com/mattboy112/SC-CoPilot/releases/latest)**
+**[Get the latest installer →](https://github.com/mattboy112/SC-CoPilot/releases/latest)** · [Website](https://mattboy112.github.io/SC-CoPilot/)
 
 1. Download `SC_CoPilot_Setup_x.y.z.exe` and run it. It installs just for you and doesn't need admin.
 2. Windows may show "Windows protected your PC", because the installer isn't code-signed yet. Click **More info → Run anyway**.
@@ -27,7 +27,8 @@ It checks for updates by itself and installs them in one click (Settings → Abo
 - **Dashboard.** Overview, Contracts, Combat and a 30-day History, all read from the game's log file.
 - **Trade & mining prices.** Live player-reported prices from [UEX](https://uexcorp.space/), with best sell/buy spots and routes.
 - **In-game overlay.** A click-through panel with your zone, current objective, quantum status and the last thing the co-pilot said.
-- **Personalities.** Pick how your co-pilot talks: Ship AI, Fleet officer, Laid-back hauler, Deadpan AI, Corporate assistant or Pyro outlaw. You can rewrite any callout or reply, give lines several versions to pick from at random, and share your lines with friends as a file.
+- **Personalities.** Pick how your co-pilot talks: Ship AI, Fleet officer, Laid-back hauler, Deadpan AI, Corporate assistant or Pyro outlaw. You can rewrite any callout or reply and give lines several versions to pick from at random.
+- **Community line packs.** Install packs other players made from Personality → Browse community packs, or [share your own](packs/README.md).
 - **Target reader (beta).** Ask "are his shields down?", "how's his hull?" or "target status". You draw a box around your target's shield and hull displays once, and it reads them off your screen. It can also call out when the target's shields drop.
 - **Your keybinds, untouched.** It reads your own binds, so it presses what you've set. It can also give spare keys to the actions Star Citizen leaves unbound, like separate gear up and gear down, but only when you ask. It backs up your bindings file first.
 

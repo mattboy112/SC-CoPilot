@@ -1,0 +1,56 @@
+name: Add line pack
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: packs
+  cancel-in-progress: false
+
+jobs:
+  add:
+    if: github.event.label.name == 'pack-approved'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Add the pack
+        id: add
+        env:
+          BODY: ${{ github.event.issue.body }}
+          AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE: ${{ github.event.issue.number }}
+          SC_COPILOT_HOME: ${{ runner.temp }}/sc_home
+        run: |
+          printf '%s' "$BODY" > "$RUNNER_TEMP/issue.md"
+          if python packaging/packs.py from-issue "$RUNNER_TEMP/issue.md" --author "$AUTHOR" --issue "$ISSUE"; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit
+        if: steps.add.outputs.ok == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packs
+          git commit -m "Add line pack from #${{ github.event.issue.number }}"
+          git push
+
+      - name: Reply on the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$N" --body-file pack_result.md
+          if [ "${{ steps.add.outputs.ok }}" = "true" ]; then gh issue close "$N"; fi

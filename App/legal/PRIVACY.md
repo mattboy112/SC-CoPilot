@@ -20,6 +20,7 @@ SC Co-Pilot runs on your PC. It has no account system, no analytics and no track
 | You use a Microsoft voice | Microsoft's text-to-speech service | The text being spoken. |
 | First use of speech recognition or Kokoro voices | Hugging Face / GitHub | A normal file download. |
 | Update check (if on) | GitHub | A request for the latest version number. |
+| You browse community line packs | GitHub | A download of the pack list and the packs you preview or install. |
 
 Nothing is sent to the developer, except when you use the Co-Pilot subscription as described above, or choose to paste the "Copy diagnostics" text into a bug report. Diagnostics never include your API or subscription key.
 

@@ -413,6 +413,12 @@ class App:
 
     def set_icon(self):
         png = P.resource("sc_copilot.png")
+        ico = P.resource("sc_copilot.ico")
+        if sys.platform == "win32" and ico.exists():
+            try:
+                self.root.iconbitmap(default=str(ico))
+            except tk.TclError:
+                pass
         if png.exists():
             try:
                 self._icon = tk.PhotoImage(file=str(png))
@@ -1929,6 +1935,8 @@ class App:
         FlatButton(head, "Reset all my edits", self.reset_lines, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="right")
         FlatButton(head, "Export my lines…", self.export_lines, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="right", padx=(0, px(6)))
         FlatButton(head, "Import lines…", self.import_lines, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="right", padx=(0, px(6)))
+        FlatButton(head, "Browse community packs", self.open_pack_gallery, "primary", font=F["small_bold"], padx=12,
+                   pady=4).pack(side="right", padx=(0, px(6)))
         grid = tk.Frame(p, bg=C["bg"])
         grid.pack(fill="x")
         cur = s.get("personality") or "standard"
@@ -2004,6 +2012,107 @@ class App:
                 if is_row is not None and (not q or q in hay):
                     w.pack(fill="x", pady=px(2))
         search.bind("<KeyRelease>", filt)
+
+    def _fetch_json(self, url):
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": f"SC-CoPilot/{VER.VERSION}", "Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode("utf-8"))
+
+    def open_pack_gallery(self):
+        w = getattr(self, "pack_win", None)
+        if w is not None and w.winfo_exists():
+            w.lift()
+            return
+        w = tk.Toplevel(self.root)
+        self.pack_win = w
+        self.pack_cache = getattr(self, "pack_cache", {})
+        w.title("Community line packs")
+        w.configure(bg=C["bg"])
+        w.transient(self.root)
+        w.geometry(f"{px(780)}x{px(620)}+{self.root.winfo_rootx() + px(60)}+{self.root.winfo_rooty() + px(40)}")
+        top = tk.Frame(w, bg=C["bg"])
+        top.pack(fill="x", padx=px(16), pady=(px(14), px(6)))
+        label(top, "Community line packs", "h2", "hi", "bg").pack(side="left")
+        FlatButton(top, "Share your pack", lambda: webbrowser.open(VER.SHARE_PACK_URL), "normal", font=F["small_bold"],
+                   padx=10, pady=4).pack(side="right")
+        label(w, "Packs other players made. Hear it plays a few lines; Install replaces your edited lines (they're backed up first).",
+              "small", "muted", "bg", wraplength=px(740), justify="left").pack(anchor="w", padx=px(16))
+        sf = ScrollFrame(w, C["bg"])
+        sf.pack(fill="both", expand=True, padx=px(16), pady=px(10))
+
+        def loading(p):
+            label(p, "Loading the gallery…", "small", "muted", "bg").pack(anchor="w", pady=px(10))
+        sf.swap(loading)
+
+        def fetch():
+            try:
+                data = self._fetch_json(VER.PACKS_INDEX_URL)
+                packs = data.get("packs") or []
+                err = None
+            except Exception as ex:
+                packs, err = [], f"{type(ex).__name__}"
+            self.ui(("call", lambda: w.winfo_exists() and sf.swap(lambda p: self.render_pack_list(p, packs, err))))
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def render_pack_list(self, p, packs, err):
+        if err:
+            label(p, f"Couldn't load the gallery ({err}). Check your internet, or browse it on GitHub.", "small", "low", "bg",
+                  wraplength=px(700), justify="left").pack(anchor="w", pady=px(8))
+            FlatButton(p, "Open the gallery on GitHub", lambda: webbrowser.open(VER.PACKS_PAGE), "normal", font=F["small_bold"],
+                       padx=10, pady=4).pack(anchor="w")
+            return
+        if not packs:
+            label(p, "No packs yet. Be the first: click Share your pack.", "small", "muted", "bg").pack(anchor="w", pady=px(8))
+            return
+        for e in packs:
+            c = card(p, padx=px(14), pady=px(10))
+            c.pack(fill="x", pady=(0, px(8)))
+            label(c, e.get("name", "?"), "h2", "hi").pack(anchor="w")
+            base = LN.PERSONALITIES.get(e.get("personality"), {}).get("name", "Ship AI")
+            label(c, f"by {e.get('author') or 'unknown'}  ·  {e.get('lines', 0)} lines  ·  based on {base}", "small", "dim").pack(anchor="w")
+            if e.get("description"):
+                label(c, e["description"], "small", "text", wraplength=px(680), justify="left").pack(anchor="w", pady=(px(4), px(6)))
+            row = tk.Frame(c, bg=C["card"])
+            row.pack(anchor="w")
+            FlatButton(row, "Hear it", lambda e=e: self.pack_action(e, "hear"), "normal", font=F["small_bold"], padx=10, pady=3).pack(side="left", padx=(0, px(6)))
+            FlatButton(row, "Install", lambda e=e: self.pack_action(e, "install"), "primary", font=F["small_bold"], padx=12, pady=3).pack(side="left")
+
+    def pack_action(self, e, what):
+        def go():
+            try:
+                pack = self.pack_cache.get(e["file"]) or self._fetch_json(VER.PACKS_RAW + e["file"])
+                self.pack_cache[e["file"]] = pack
+            except Exception as ex:
+                self.ui(("toast", f"Couldn't download that pack ({type(ex).__name__})."))
+                return
+            if what == "hear":
+                tmp = {"personality": pack.get("personality", "standard"), "lines": pack.get("lines", {})}
+                self.speaker.say(LN.line(tmp, "greeting"), priority=True)
+                self.speaker.say(LN.line(tmp, "arm_off"))
+                self.speaker.say(LN.line(tmp, "kill_n", **self.SAMPLE))
+            else:
+                self.ui(("call", lambda: self.install_pack(pack)))
+        threading.Thread(target=go, daemon=True).start()
+
+    def install_pack(self, pack):
+        mine = self.settings.get("lines") or {}
+        if mine and not messagebox.askyesno(APP_NAME, f"Install “{pack.get('name')}”? It replaces your {len(mine)} edited lines. "
+                                            "Your current lines are backed up first.", parent=getattr(self, "pack_win", self.root)):
+            return
+        if mine:
+            bdir = P.DATA_DIR / "line_backups"
+            bdir.mkdir(parents=True, exist_ok=True)
+            (bdir / f"lines-{datetime.now():%Y%m%d-%H%M%S}.json").write_text(LN.dumps_pack(self.settings, "Backup"), encoding="utf-8")
+        try:
+            n = LN.import_pack(self.settings, pack)
+        except ValueError as ex:
+            self.toast(str(ex))
+            return
+        save_settings(self.settings)
+        self.refresh_lines()
+        self.toast(f"Installed {pack.get('name')} ({n} lines).")
+        self.preview_voice()
 
     def set_personality(self, pid):
         self.set_and_save("personality", pid)

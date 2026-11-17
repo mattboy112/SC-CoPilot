@@ -27,7 +27,8 @@ def latest(repo=VER.GITHUB_REPO, timeout=8):
         data = json.loads(r.read().decode("utf-8"))
     if data.get("draft") or data.get("prerelease"):
         return None
-    asset = next((a for a in data.get("assets", []) if a.get("name", "").lower().endswith(".exe")), None)
+    exes = [a for a in data.get("assets", []) if a.get("name", "").lower().endswith(".exe")]
+    asset = next((a for a in exes if re.search(r"\d+\.\d+", a.get("name", ""))), exes[0] if exes else None)
     return {"tag": data.get("tag_name", ""), "url": data.get("html_url") or VER.RELEASES_URL, "notes": (data.get("body") or "").strip(),
             "asset": asset.get("browser_download_url") if asset else None, "size": asset.get("size", 0) if asset else 0}
 
