@@ -146,6 +146,20 @@ def fade_tail(x, sr, keep, fade=0.25):
     return y
 
 
+def envelope(x, sr, step=0.02):
+    """Loudness every `step` seconds, scaled 0..1. The avatar uses it to move with the words."""
+    x = np.asarray(x, dtype=np.float32)
+    if x.ndim > 1:
+        x = x.mean(axis=1)
+    n = max(1, int(sr * step))
+    frames = len(x) // n
+    if frames == 0:
+        return []
+    rms = np.sqrt(np.mean(x[:frames * n].reshape(frames, n) ** 2, axis=1))
+    top = float(np.percentile(rms, 95)) or 1.0
+    return [round(float(v), 3) for v in np.clip(rms / top, 0, 1) ** 0.7]
+
+
 def normalize(x, peak=0.89):
     m = float(np.max(np.abs(x))) if len(x) else 0.0
     return (x * (peak / m)).astype(np.float32) if m > 1e-6 else x

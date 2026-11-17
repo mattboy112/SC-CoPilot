@@ -3,6 +3,7 @@ import time
 import tkinter as tk
 import tkinter.font as tkfont
 
+import sc_avatar as AV
 from sc_log import clean_place
 
 CORNERS = [("top_right", "Top right"), ("top_left", "Top left"), ("top_center", "Top center"), ("bottom_left", "Bottom left"),
@@ -169,8 +170,10 @@ class Overlay:
 
     ROWS = ("chips", "ship", "objective", "qt", "callout")
 
-    def __init__(self, root, get_settings, game_window=None):
+    def __init__(self, root, get_settings, game_window=None, get_activity=None):
         self.root = root
+        self.get_activity = get_activity or (lambda: ("idle", 0.0))
+        self.avatar = None
         self.get_settings = get_settings
         self.game_window = game_window
         self.game_mon = None
@@ -190,10 +193,11 @@ class Overlay:
 
     def _style(self):
         s = self.get_settings()
-        return (int(s.get("overlay_scale", 100)), int(s.get("overlay_opacity", 82)), s.get("overlay_corner", "top_right"))
+        return (int(s.get("overlay_scale", 100)), int(s.get("overlay_opacity", 82)), s.get("overlay_corner", "top_right"),
+                bool(s.get("avatar_on", True)), s.get("avatar_size", "medium"))
 
     def build(self):
-        scale_pct, opacity, _ = self.built_style = self._style()
+        scale_pct, opacity, corner, avatar_on, avatar_size = self.built_style = self._style()
         scale = max(0.7, min(2.0, scale_pct / 100.0))
         self.opacity = max(0.3, min(1.0, opacity / 100.0))
         self.win = tk.Toplevel(self.root)
@@ -206,6 +210,14 @@ class Overlay:
         frame = tk.Frame(self.win, bg=PANEL, padx=int(12 * scale), pady=int(8 * scale), highlightthickness=1,
                          highlightbackground="#1f3442")
         frame.pack(fill="both", expand=True)
+        side = "left" if "left" in corner else "right"
+        if avatar_on:
+            px = int(AV.SIZE_PX.get(avatar_size, 96) * scale)
+            self.avatar = AV.Avatar(frame, px, PANEL, self.get_activity)
+            self.avatar.canvas.pack(side=side, padx=(int(10 * scale), 0) if side == "right" else (0, int(10 * scale)))
+        text = tk.Frame(frame, bg=PANEL)
+        text.pack(side="left" if side == "right" else "right", fill="y")
+        frame = text
         self.tiny = self._font(int(8 * scale), True)
         wrap = int(440 * scale)
         self.rows = {"chips": tk.Frame(frame, bg=PANEL)}
@@ -222,6 +234,9 @@ class Overlay:
         self.last_sig = None
 
     def destroy(self):
+        if self.avatar is not None:
+            self.avatar.stop()
+            self.avatar = None
         if self.win is not None:
             try:
                 self.win.destroy()
@@ -242,6 +257,8 @@ class Overlay:
             self.win.attributes("-alpha", self.opacity if on else 0.0)
         except tk.TclError:
             pass
+        if self.avatar is not None:
+            (self.avatar.start if on else self.avatar.stop)()
 
     def _place(self):
         corner = self.get_settings().get("overlay_corner", "top_right")

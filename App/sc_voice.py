@@ -596,6 +596,7 @@ class Speaker(threading.Thread):
         self.cache = self.tmp / "voice_cache"
         self.cache.mkdir(parents=True, exist_ok=True)
         self.speaking = False
+        self._env = None
         self.edge_ok = None
         self.last_error = ""
         self.pending = {}
@@ -768,6 +769,21 @@ class Speaker(threading.Thread):
             return p[1].get("path")
         return self._synth(text, s)
 
+    def level(self):
+        """How loud the voice is right now, 0..1; -1 while speaking with a voice whose loudness isn't known."""
+        env = self._env
+        if env:
+            t0, frames, step = env
+            i = int((time.time() - t0) / step)
+            return float(frames[i]) if 0 <= i < len(frames) else 0.0
+        return -1.0 if self.speaking else 0.0
+
+    def _track(self, data, sr):
+        try:
+            self._env = (time.time(), FX.envelope(data, sr), 0.02) if FX is not None else None
+        except Exception:
+            self._env = None
+
     def _peek(self):
         with self.q.mutex:
             return self.q.queue[0] if self.q.queue else None
@@ -795,6 +811,7 @@ class Speaker(threading.Thread):
             except Exception:
                 self.last_error = traceback.format_exc(limit=2)
             finally:
+                self._env = None
                 if self.q.empty():
                     self.speaking = False
                     self.on_state(False)
@@ -830,6 +847,7 @@ class Speaker(threading.Thread):
     def _play_sd(self, path, s):
         data, sr = read_wav(path)
         gain = max(0, min(100, int(s.get("volume", 90)))) / 100.0
+        self._track(data, sr)
         sd.play(data * gain, sr)
         t0 = time.time()
         time.sleep(0.05)
@@ -851,6 +869,10 @@ class Speaker(threading.Thread):
             return
         vol = int(max(0, min(100, s.get("volume", 90))) * 10)
         mci(f"setaudio sccopilot_tts volume to {vol}")
+        try:
+            self._track(*(decode_mp3(path) if str(path).endswith(".mp3") else read_wav(path)))
+        except Exception:
+            self._env = None
         mci("play sccopilot_tts")
         t0 = time.time()
         while time.time() - t0 < 60:

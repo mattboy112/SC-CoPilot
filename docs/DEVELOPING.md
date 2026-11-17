@@ -33,6 +33,7 @@ Settings, logs and caches go to `%APPDATA%\SC Co-Pilot` and `%LOCALAPPDATA%\SC C
 | `.github/workflows/pages.yml` | Publishes the website (`docs/site` plus `packs/`) to GitHub Pages |
 | `.github/workflows/packs.yml` | Adds a community line pack when a maintainer labels its issue `pack-approved` |
 | `App/sc_lines.py` | Every spoken line, the personalities, and line-pack import/export |
+| `App/sc_avatar.py` | The overlay's animated avatar (maths in `AvatarModel`, drawing in `Avatar`) |
 | `App/sc_hud.py` | Target reader: screen capture and shield/hull measurement |
 | `App/brand/` | `logo.svg` (the current logo) and `options/` (the other designs) |
 | `packs/` | Community line packs and their `index.json` |
