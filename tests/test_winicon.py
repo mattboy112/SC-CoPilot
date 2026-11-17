@@ -30,12 +30,23 @@ def lnk(*texts, wide=True):
 
 
 def test_shortcut_state():
-    new = "sc_copilot_1a2b3c4d.ico"
+    new = r"C:\Users\Me\Downloads\SC_CoPilot\App\.icons\sc_copilot_1a2b3c4d.ico"
     old_icon = r"C:\Users\Me\Downloads\SC_CoPilot\App\sc_copilot.ico"
+    hidden = r"C:\Users\Me\AppData\Local\SC Co-Pilot\icons\sc_copilot_1a2b3c4d.ico"
     assert WI.shortcut_state(lnk(r"C:\Python\pythonw.exe", old_icon), new) == "stale"
     assert WI.shortcut_state(lnk(old_icon, wide=False), new) == "stale"
-    assert WI.shortcut_state(lnk(r"C:\Users\Me\AppData\Local\SC Co-Pilot\icons" "\\" + new), new) == "ok"
+    assert WI.shortcut_state(lnk(hidden), new) == "stale"
+    assert WI.shortcut_state(lnk(new.upper()), new) == "ok"
     assert WI.shortcut_state(lnk(r"C:\Users\Me\AppData\Local\Programs\SC Co-Pilot\SC_CoPilot.exe"), new) == "other"
+
+
+def test_source_runs_keep_the_icon_next_to_the_app(monkeypatch, tmp_path):
+    monkeypatch.setattr(WI.P, "FROZEN", False)
+    monkeypatch.setattr(WI.P, "APP_DIR", tmp_path / "App")
+    src = tmp_path / "logo.ico"
+    src.write_bytes(b"logo")
+    got = WI.stable_icon(src)
+    assert got.parent == tmp_path / "App" / ".icons" and got.read_bytes() == b"logo"
 
 
 def test_off_windows_helpers_are_harmless(tmp_path):

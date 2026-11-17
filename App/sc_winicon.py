@@ -7,6 +7,9 @@ Three things get in the way when the app runs from source:
 - Tk's icon calls don't always reach the taskbar, so the .ico is also handed to Windows directly.
 - Windows caches icons by file path, so a shortcut keeps its old picture after the logo changes.
   The icon is copied to a name that includes a hash of its contents, and shortcuts point there.
+  When running from source the copy sits next to the app's files, not in AppData: the Microsoft
+  Store Python quietly redirects AppData writes into its own private folder, where Explorer can't
+  see them (the shortcut then shows a blank page).
 """
 import base64
 import ctypes
@@ -38,31 +41,39 @@ def icon_name(data):
     return f"sc_copilot_{hashlib.sha1(data).hexdigest()[:8]}.ico"
 
 
+def icon_folders():
+    if P.FROZEN:
+        return [P.LOCAL_DIR / "icons"]
+    return [Path(P.APP_DIR) / ".icons", P.LOCAL_DIR / "icons"]
+
+
 def stable_icon(src=None, folder=None):
     src = Path(src) if src else P.resource("sc_copilot.ico")
     if not src.exists():
         return None
     data = src.read_bytes()
-    dst = Path(folder or P.LOCAL_DIR / "icons") / icon_name(data)
-    try:
-        if not dst.exists() or dst.read_bytes() != data:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_bytes(data)
-        return dst
-    except OSError:
-        return src
+    for base in ([Path(folder)] if folder else icon_folders()):
+        dst = base / icon_name(data)
+        try:
+            if not dst.exists() or dst.read_bytes() != data:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(data)
+            return dst
+        except OSError:
+            continue
+    return src
 
 
 def _has(blob, text):
     return text.encode("utf-16-le") in blob or text.encode("latin-1", "ignore") in blob
 
 
-def shortcut_state(blob, icon_file_name):
-    """'ok' (already shows this icon), 'stale' (made by the app, older icon) or 'other' (not ours: leave it)."""
+def shortcut_state(blob, icon_path):
+    """'ok' (already points at this exact icon file), 'stale' (made by the app, other icon) or 'other' (not ours)."""
     low = blob.lower()
     if not (_has(low, "sc_copilot") and _has(low, ".ico")):
         return "other"
-    return "ok" if _has(low, icon_file_name.lower()) else "stale"
+    return "ok" if _has(low, str(icon_path).lower()) else "stale"
 
 
 if WIN:
@@ -216,7 +227,7 @@ def heal_desktop_shortcut(icon=None):
     lnk = desktop_dir() / SHORTCUT_NAME
     if icon is None or not lnk.exists():
         return "no shortcut"
-    state = shortcut_state(lnk.read_bytes(), icon.name)
+    state = shortcut_state(lnk.read_bytes(), icon)
     if state != "stale":
         return state
     q = lambda p: str(p).replace("'", "''")
