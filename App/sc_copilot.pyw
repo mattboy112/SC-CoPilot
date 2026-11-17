@@ -43,6 +43,7 @@ import sc_lines as LN
 import sc_nvidia as NV
 import sc_winicon as WI
 import sc_avatar as AV
+import sc_shipstate as SS
 import sc_update as UPD
 import sc_version as VER
 import sc_overlay as OV
@@ -356,6 +357,9 @@ class App:
         self.uex = T.Uex()
         self.uex_extra = T.UexExtra(self.uex)
         self.overlay = OV.Overlay(root, lambda: self.settings, B.game_window, self.avatar_activity)
+        self.ship = SS.ShipState()
+        if sys.platform == "win32":
+            SS.KeyWatcher(self.ship, lambda: self.binds, B.ACTION_INDEX, B.split_key, B.busy, B.game_focused).start()
         self.hud = HUD.Reader(lambda: self.settings, lambda: (self.state.ship or {}).get("name", ""))
         self.hud.watch_ok = lambda: bool(self.state.running)
         self.hud.on_shields_down = lambda: self.settings.get("callouts", {}).get("combat", True) and self.callout(
@@ -1926,7 +1930,7 @@ class App:
                 if m.get("say"):
                     self.ui(("copilot", m["say"]))
                     self.speaker.say(m["say"], priority=True)
-                done, skipped = MAC.run(m, self.binds, B.ACTION_INDEX)
+                done, skipped = MAC.run(m, self.binds, B.ACTION_INDEX, ship=self.ship)
                 self.ui(("action", f"{m['name']}: pressed {', '.join(done) or 'nothing'}"
                                    + (f" · skipped {', '.join(skipped)}" if skipped else "")))
                 if not done and skipped:
@@ -2543,6 +2547,10 @@ class App:
 
     def on_game_event(self, name, info):
         try:
+            self.ship.on_event(name, info)
+        except Exception:
+            traceback.print_exc()
+        try:
             self.callouts.handle(name, info)
         except Exception:
             traceback.print_exc()
@@ -2664,20 +2672,79 @@ class App:
             self.speaker.say(say, priority=True)
             return
         a = B.ACTION_INDEX[cmd["action"]]
+        if a["id"] == "qt_engage":
+            threading.Thread(target=self.quantum_engage, args=(cmd, t_release, stt), daemon=True, name="quantum").start()
+            return
         say = cmd.get("say")
-        use = a
-        fb = B.ACTION_INDEX.get(cmd.get("fallback") or "")
-        if not self.binds.pressable(a["sc"]) and fb and self.binds.pressable(fb["sc"]):
-            use, say = fb, cmd.get("fallback_say")
+        use, note, ack_id = a, None, None
+        if a["id"] in SS.EFFECT:
+            press_id, note = self.ship.plan(a["id"], self.can_press)
+            key = SS.EFFECT[a["id"]][0]
+            if note == "skip":
+                said = "Already flight ready." if a["id"] == "flight_ready" else (self.ship.describe(key) or "Already done.")
+                say = said + " Say it again if I've got that wrong."
+                self.ui(("action", f"{a['label']}: not pressed, it's already like that (toggle would undo it)"))
+                self.ui(("copilot", say))
+                self.speaker.say(say, priority=True)
+                return
+            already = self.ship.describe(key) if note == "already" else ""
+            use, ack_id = B.ACTION_INDEX.get(press_id, a), a["id"]
+        else:
+            fb = B.ACTION_INDEX.get(cmd.get("fallback") or "")
+            if not self.binds.pressable(a["sc"]) and fb and self.binds.pressable(fb["sc"]):
+                use, say = fb, cmd.get("fallback_say")
         ok, msg = self.binds.press(use["sc"])
         self.ui(("action", f"{use['label']}: {'pressed ' + msg if ok else 'NOT pressed, ' + msg}"))
-        if ok:
+        if ok and ack_id:
+            want = SS.EFFECT[ack_id][1]
+            self.ship.apply(use["id"], intent=want if want in (True, False) else None)
+            say = already or LN.ack(self.settings, ack_id, say or "") or None
+        elif ok:
             say = LN.ack(self.settings, use["id"], say or "") or None
         if not ok:
             say = self.press_problem(a, msg)
         if say:
             self.ui(("copilot", say))
             self.speaker.say(say, priority=True)
+        if t_release:
+            self.ui(("tool", f"instant command · heard in {stt:.1f}s · done {time.time() - t_release:.1f}s after you let go"))
+
+    def can_press(self, aid):
+        a = B.ACTION_INDEX.get(aid)
+        return bool(a) and self.binds.pressable(a["sc"])
+
+    def quantum_engage(self, cmd, t_release=None, stt=0.0):
+        """Star Citizen 4.x: you can only jump in NAV mode, with a destination set, by holding the engage button."""
+        def speak(text):
+            self.ui(("copilot", text))
+            self.speaker.say(text, priority=True)
+        st = self.state
+        with st.lock:
+            tgt, t_set, t_arr = st.qt_target, st.qt_target_ts, st.qt_arrived_ts
+        if not (tgt and t_set > t_arr and time.time() - t_set < 3600):
+            _p, note = self.ship._skip_or_force("qt_dest", True, "qt_engage", time.time())
+            if note == "skip":
+                self.ui(("action", "Engage quantum drive: not pressed, no destination in the game log"))
+                speak("I don't see a destination set. Pick one on the starmap, or say it again and I'll try anyway.")
+                return
+        if self.ship.get("master") is not True:
+            mode = "nav_mode" if self.can_press("nav_mode") else \
+                "master_mode_cycle" if self.can_press("master_mode_cycle") and self.ship.get("master") is False else None
+            if mode:
+                m = B.ACTION_INDEX[mode]
+                ok, msg = self.binds.press(m["sc"])
+                self.ui(("action", f"{m['label']}: {'pressed ' + msg if ok else 'NOT pressed, ' + msg}"))
+                if not ok:
+                    speak(self.press_problem(m, msg))
+                    return
+                self.ship.apply(mode, intent=True)
+                time.sleep(2.0)
+        a = B.ACTION_INDEX["qt_engage"]
+        ok, msg = self.binds.press(a["sc"], hold=0.8)
+        self.ui(("action", f"{a['label']}: {'pressed ' + msg if ok else 'NOT pressed, ' + msg}"))
+        say = (LN.ack(self.settings, a["id"], cmd.get("say") or "") or None) if ok else self.press_problem(a, msg)
+        if say:
+            speak(say)
         if t_release:
             self.ui(("tool", f"instant command · heard in {stt:.1f}s · done {time.time() - t_release:.1f}s after you let go"))
 

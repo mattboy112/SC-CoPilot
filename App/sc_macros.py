@@ -64,8 +64,10 @@ def find(macros, name):
     return None
 
 
-def run(macro, binds, actions_index, stop_flag=None, on_step=None):
-    """Press each step in order. Steps without a key are skipped (never swapped for a blind toggle)."""
+def run(macro, binds, actions_index, stop_flag=None, on_step=None, ship=None):
+    """Press each step in order. Steps without a key are skipped (never swapped for a blind toggle).
+    With `ship` (a ShipState), steps that would undo something already done (flight ready twice) are skipped,
+    and what each step did is recorded."""
     done, skipped = [], []
     for i, st in enumerate(macro.get("steps", [])):
         if stop_flag is not None and stop_flag.is_set():
@@ -75,11 +77,18 @@ def run(macro, binds, actions_index, stop_flag=None, on_step=None):
         if not a:
             skipped.append(f"{st.get('action')} (unknown action)")
             continue
-        if not binds.pressable(a["sc"]):
+        note = None
+        if ship is not None:
+            _pid, note = ship.plan(a["id"], lambda aid: aid == a["id"] and binds.pressable(a["sc"]))
+        if note == "skip":
+            skipped.append(f"{a['label']} (already done)")
+        elif not binds.pressable(a["sc"]):
             skipped.append(f"{a['label']} (no key yet)")
         else:
             ok, msg = binds.press(a["sc"], focus=(i == 0 or not done))
             (done if ok else skipped).append(f"{a['label']}" + ("" if ok else f" ({msg})"))
+            if ok and ship is not None:
+                ship.apply(a["id"])
             if not ok and "isn't running" in msg:
                 break
         if on_step:

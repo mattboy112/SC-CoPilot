@@ -50,7 +50,7 @@ ENGINEERING = [
 MODES = [
     (r"\bnav mode\b|^nav$|\b(go|switch to|swap to) nav\b|\bcruise mode\b", "nav_mode", "NAV mode."),
     (r"\b(scm|combat|fight|fighting|s c m) mode\b|^scm$|\b(go|switch to|swap to) scm\b|\bcombat ready\b", "scm_mode", "SCM mode."),
-    (r"\bquantum mode\b|^quantum$|\b(spool|prep|ready) (up )?(the )?quantum\b", "quantum_mode", "Quantum mode."),
+    (r"\bquantum mode\b|^quantum$|\b(spool|prep|ready) (up )?(the )?quantum\b|\bnavigation mode\b", "nav_mode", "NAV mode. Ready for quantum."),
     (r"\bmissiles? mode\b|^missiles?$|\b(switch to|go to) missiles?\b", "missile_mode", "Missile mode."),
     (r"\b(weapons|gunnery) mode\b|^weapons$", "guns_mode", "Guns mode."),
     (r"\b(scan|scanning|scanner) mode\b|^scan$|\b(switch to|go to) scan(ning)?\b", "scan_mode", "Scan mode."),

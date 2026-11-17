@@ -20,6 +20,12 @@ PROFILE_ENTRY = b"Data\\Libs\\Config\\defaultProfile.xml"
 
 MODIFIERS = {"lalt", "ralt", "lctrl", "rctrl", "lshift", "rshift"}
 MOUSE_OK = {"mouse3", "mouse4", "mouse5"}
+BUSY = [0.0]
+
+
+def busy():
+    """True while the co-pilot is pressing keys (so the key watcher doesn't mistake them for yours)."""
+    return time.time() < BUSY[0]
 
 SCAN = {
     "escape": (0x01, False), "1": (0x02, False), "2": (0x03, False), "3": (0x04, False), "4": (0x05, False),
@@ -77,7 +83,6 @@ ACTIONS = [
     ("nav_mode", "NAV mode", "v_master_mode_set_nav", "Modes"),
     ("scm_mode", "SCM mode (combat)", "v_master_mode_set_scm", "Modes"),
     ("master_mode_cycle", "Switch NAV / SCM (hold)", "v_master_mode_cycle_long", "Modes"),
-    ("quantum_mode", "Quantum mode", "v_set_quantum_mode", "Modes"),
     ("qt_engage", "Engage quantum drive", "v_toggle_qdrive_engagement", "Modes"),
     ("jump_request", "Jump point: request jump", "v_toggle_jump_request", "Modes"),
     ("guns_mode", "Guns mode", "v_set_guns_mode", "Modes"),
@@ -572,6 +577,10 @@ if sys.platform == "win32":
     def admin_mismatch():
         return game_elevated() is True and not self_elevated()
 
+    def game_focused():
+        fg = user32.GetForegroundWindow()
+        return bool(fg) and _is_sc(fg)
+
     def diag():
         fg = user32.GetForegroundWindow()
         return {"fg_pid": _pid_of(fg) if fg else 0, "sc_pids": sorted(_sc_pids()), "fg_is_sc": _is_sc(fg),
@@ -605,6 +614,9 @@ else:
 
     def diag():
         return {}
+
+    def game_focused():
+        return False
 
 
 # ---------------------------------------------------------------- binds
@@ -713,7 +725,7 @@ class Binds:
                 return "hold", 0.4
         return "tap", 0.06
 
-    def press(self, sc, times=1, focus=True):
+    def press(self, sc, times=1, focus=True, hold=None):
         k = self.spec_for(sc)
         if not k:
             raw = self.keys.get(sc)
@@ -729,9 +741,12 @@ class Binds:
             self._log(sc, k[0], "focus failed")
             return False, "Star Citizen isn't running" if not game_window() else "couldn't bring Star Citizen to the front"
         LAST_SEND.update(sent=0, err=0)
-        spec, mode, on_press, on_hold, hold = k
+        spec, mode, on_press, on_hold, hold_s = k
         key, mods = split_key(spec)
-        kind, dur = self.timing(mode, on_press, on_hold, hold)
+        kind, dur = self.timing(mode, on_press, on_hold, hold_s)
+        if hold and kind != "double":
+            kind, dur = "hold", max(dur, float(hold))
+        BUSY[0] = time.time() + 30
         taps = 2 if kind == "double" else 1
         for n in range(max(1, int(times))):
             for m in mods:
@@ -753,6 +768,7 @@ class Binds:
                 _send_scan(*SCAN[m], True)
             if n < times - 1:
                 time.sleep(0.18)
+        BUSY[0] = time.time() + 0.3
         self._log(sc, spec, f"sent {LAST_SEND['sent']} key events" + (f", error {LAST_SEND['err']}" if LAST_SEND["err"] else "") + f", {kind} {dur:.2f}s")
         if LAST_SEND["err"] and not LAST_SEND["sent"]:
             return False, f"Windows refused the keypress (error {LAST_SEND['err']})"

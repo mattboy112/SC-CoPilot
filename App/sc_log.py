@@ -28,6 +28,7 @@ MISSION_ENDED = re.compile(r"mission_id (?P<mid>[0-9a-fA-F-]+) - mission_state M
 OBJ_UPSERT = re.compile(r"mission_id (?P<mid>[0-9a-fA-F-]+) - objective_id (?P<oid>[0-9a-fA-F-]+) - state MISSION_OBJECTIVE_STATE_(?P<state>\w+)")
 OBJ_UPDATE = re.compile(r"Objective updated id=(?P<oid>[^,]+),.*?hidden=(?P<hidden>\d), hiddenInUI=(?P<hui>\d).*?\[Text=(?P<text>[^\]]*)\]")
 QT_TARGET = re.compile(r"\| (?P<ent>[^|\[\s]+)\[\d+\]\|.*?selected point (?P<target>\S+) as their destination")
+QT_FUEL_TARGET = re.compile(r"\| (?P<ent>[^|\[\s]+)\[\d+\]\|.*?requested fuel calculation to destination (?P<target>[^\s\[]+)")
 QT_ARRIVED = re.compile(r"\| (?P<ent>[^|\[\s]+)\[\d+\]\|")
 LOC_INV = re.compile(r"Player\[(?P<player>[^\]]+)\] requested inventory for Location\[(?P<loc>[^\]]+)\]")
 SHOP_BUY = re.compile(r"shopName\[(?P<shop>[^\]]*)\].*?client_price\[(?P<price>[\d.]+)\].*?itemName\[(?P<item>[^\]]*)\] quantity\[(?P<qty>\d+)\]")
@@ -315,8 +316,8 @@ class GameState:
                     c["current"] = m.group("text").strip()
                     self.bump()
             return []
-        if "Player Selected Quantum Target" in rest:
-            m = QT_TARGET.search(rest)
+        if "Player Selected Quantum Target" in rest or "Requested Fuel to Quantum Target" in rest:
+            m = QT_TARGET.search(rest) or QT_FUEL_TARGET.search(rest)
             if m:
                 self.ship_entity = m.group("ent")
                 tgt = m.group("target")
