@@ -15,6 +15,6 @@ First public release.
 - Personalities: six original co-pilot characters, plus a line editor to rewrite any callout or reply, with random variants and shareable line packs.
 - Target reader (beta): reads your target's shield and hull off the HUD from boxes you draw once, answers "target status" / "are his shields down?", and can call out when shields drop.
 - Community line-pack gallery: browse, preview and install packs in the app; share yours through a GitHub form.
-- New logo.
+- New logo, shown on the taskbar, window, desktop shortcut, installer and website.
 - First-run setup, automatic updates, Copy diagnostics for bug reports.
 - 169 automated tests run on every build.

@@ -41,6 +41,7 @@ import sc_macros as MAC
 import sc_hud as HUD
 import sc_lines as LN
 import sc_nvidia as NV
+import sc_winicon as WI
 import sc_update as UPD
 import sc_version as VER
 import sc_overlay as OV
@@ -260,19 +261,23 @@ def self_command(*args):
 def create_desktop_shortcut():
     target, args = self_command()
     qq = lambda p: str(p).replace("'", "''")
-    icon = P.resource("sc_copilot.ico")
+    icon = WI.stable_icon() or P.resource("sc_copilot.ico")
     ps = (
         "$d=[Environment]::GetFolderPath('Desktop');"
         "$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'SC Co-Pilot.lnk'));"
         f"$s.TargetPath='{qq(target)}';"
         + (f"$s.Arguments='{qq(args)}';" if args else "")
         + f"$s.WorkingDirectory='{qq(P.EXE_DIR)}';"
-        + (f"$s.IconLocation='{qq(icon)}';" if icon.exists() else "")
+        + (f"$s.IconLocation='{qq(icon)},0';" if icon.exists() else "")
         + "$s.Save()"
     )
-    enc = base64.b64encode(ps.encode("utf-16-le")).decode()
-    subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], check=True,
-                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), capture_output=True)
+    WI.powershell(ps)
+    WI.refresh_icons(WI.desktop_dir() / WI.SHORTCUT_NAME)
+
+
+def relaunch_command():
+    target, args = self_command()
+    return f'"{target}" {args}'.strip()
 
 
 def open_path(path):
@@ -410,6 +415,8 @@ class App:
                 f"{n_clash} keys the app set up clash with other game keys. Controls tab → Fix."))
         self.root.after(200, self.tick)
         self.root.after(4000, self.prewarm)
+        if sys.platform == "win32":
+            self.root.after(3000, self.heal_shortcut)
 
     def set_icon(self):
         png = P.resource("sc_copilot.png")
@@ -1463,6 +1470,14 @@ class App:
             self.on_close()
         else:
             self.toast("Didn't get administrator rights (the Windows prompt was cancelled).")
+
+    def heal_shortcut(self):
+        def work():
+            try:
+                print(f"[icon] desktop shortcut: {WI.heal_desktop_shortcut()}", flush=True)
+            except Exception as e:
+                print(f"[icon] desktop shortcut: couldn't update ({e})", flush=True)
+        threading.Thread(target=work, daemon=True).start()
 
     def make_shortcut(self):
         try:
@@ -2803,6 +2818,7 @@ class App:
         self.root.after(100, self.tick)
 
     def on_close(self):
+        WI.unbrand(self.root)
         self.closing = True
         self.hud.stop_watch()
         try:
@@ -2861,9 +2877,9 @@ def main():
         try:
             import ctypes
             ctypes.windll.shcore.SetProcessDpiAwareness(1)
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Mokke.SCCoPilot")
         except Exception:
             pass
+        WI.set_app_id()
     if "--selftest" in sys.argv:
         sys.exit(selftest())
     if "--nvfix" in sys.argv:
@@ -2917,6 +2933,10 @@ def main():
     root.report_callback_exception = ui_error
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.deiconify()
+    try:
+        print(f"[icon] {WI.brand(root, relaunch_command())}", flush=True)
+    except Exception as e:
+        print(f"[icon] taskbar icon setup failed: {e}", flush=True)
     root.mainloop()
 
 
