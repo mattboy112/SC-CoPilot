@@ -17,6 +17,16 @@ CYAN = "#3cc8f5"
 WHITE = "#e9eef2"
 MODES = ("idle", "listen", "think", "speak")
 SIZES = [("small", "Small"), ("medium", "Medium"), ("large", "Large")]
+CHOICES = [("off", "Off")] + SIZES
+
+
+def setting(s):
+    """The avatar setting: 'off' or a size. Older settings used avatar_on + avatar_size; the size carries over."""
+    v = s.get("avatar")
+    if v in SIZE_PX or v == "off":
+        return v
+    size = s.get("avatar_size", "medium")
+    return size if size in SIZE_PX else "medium"
 SIZE_PX = {"small": 72, "medium": 96, "large": 132}
 SHADES = 6
 

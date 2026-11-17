@@ -194,10 +194,10 @@ class Overlay:
     def _style(self):
         s = self.get_settings()
         return (int(s.get("overlay_scale", 100)), int(s.get("overlay_opacity", 82)), s.get("overlay_corner", "top_right"),
-                bool(s.get("avatar_on", True)), s.get("avatar_size", "medium"))
+                AV.setting(s))
 
     def build(self):
-        scale_pct, opacity, corner, avatar_on, avatar_size = self.built_style = self._style()
+        scale_pct, opacity, corner, avatar = self.built_style = self._style()
         scale = max(0.7, min(2.0, scale_pct / 100.0))
         self.opacity = max(0.3, min(1.0, opacity / 100.0))
         self.win = tk.Toplevel(self.root)
@@ -211,8 +211,8 @@ class Overlay:
                          highlightbackground="#1f3442")
         frame.pack(fill="both", expand=True)
         side = "left" if "left" in corner else "right"
-        if avatar_on:
-            px = int(AV.SIZE_PX.get(avatar_size, 96) * scale)
+        if avatar != "off":
+            px = int(AV.SIZE_PX[avatar] * scale)
             self.avatar = AV.Avatar(frame, px, PANEL, self.get_activity)
             self.avatar.canvas.pack(side=side, padx=(int(10 * scale), 0) if side == "right" else (0, int(10 * scale)))
         text = tk.Frame(frame, bg=PANEL)
@@ -295,7 +295,7 @@ class Overlay:
             r = stack_report(_hwnd(self.win), game)
             r["alpha"] = self.opacity if self.visible else 0.0
             r["avatar"] = self.avatar.report() if self.avatar is not None else \
-                ("switched off in Settings" if not self.get_settings().get("avatar_on", True) else "not built")
+                ("switched off in Settings" if AV.setting(self.get_settings()) == "off" else "not built")
             return r
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}

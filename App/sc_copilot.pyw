@@ -78,7 +78,7 @@ DEFAULTS = {
     "pilot_notes": "", "ptt": {"kind": "key", "vk": 0x05, "name": "Mouse 4"}, "mic": None, "stt_model": "base.en",
     "stt_device": "cpu", "callouts": {c: True for c, _ in CO.CATEGORIES}, "install_dir": "", "geometry": "", "tab": "overview",
     "kokoro_voice": V.KOKORO_DEFAULT, "voice_fx": "computer", "voice_fx_amount": 100, "voice_pitch": 0, "macros": MAC.defaults(),
-    "overlay_on": False, "overlay_corner": "top_right", "overlay_scale": 100, "overlay_opacity": 82, "avatar_on": True, "avatar_size": "medium", "overlay_only_in_game": True,
+    "overlay_on": False, "overlay_corner": "top_right", "overlay_scale": 100, "overlay_opacity": 82, "overlay_only_in_game": True,
     "overlay_callout_secs": 8, "trade_system": "auto", "run_as_admin": False,
     "ai_mode": "own_key", "license_key": "", "check_updates": True, "last_update_check": 0, "setup_done": False,
     "personality": "standard", "lines": {}, "hud_profiles": {}, "hud_watch": False,
@@ -1138,10 +1138,8 @@ class App:
         slider(rt, 70, 160, s.get("overlay_scale", 100), lambda v: self.set_and_save("overlay_scale", int(float(v)))).pack(side="left")
         rt = self.srow(c, "Opacity")
         slider(rt, 30, 100, s.get("overlay_opacity", 82), lambda v: self.set_and_save("overlay_opacity", int(float(v)))).pack(side="left")
-        rt = self.srow(c, "AI avatar", "A glowing core that listens, thinks and talks along with the voice. The 20-second test shows each one.")
-        av = tk.BooleanVar(value=s.get("avatar_on", True))
-        check(rt, "Show the avatar on the overlay", av, lambda: self.set_and_save("avatar_on", bool(av.get()))).pack(side="left")
-        chooser(rt, AV.SIZES, s.get("avatar_size", "medium"), lambda v: self.set_and_save("avatar_size", v), 10).pack(side="left", padx=(px(12), 0))
+        rt = self.srow(c, "AI avatar", "A glowing core on the overlay that listens, thinks and talks along with the voice. The 20-second test shows each one.")
+        chooser(rt, AV.CHOICES, AV.setting(s), lambda v: self.set_and_save("avatar", v), 10).pack(side="left")
         rt = self.srow(c, "Show callouts for", "Seconds a spoken callout stays on the overlay.")
         slider(rt, 3, 20, s.get("overlay_callout_secs", 8), lambda v: self.set_and_save("overlay_callout_secs", int(float(v)))).pack(side="left")
 

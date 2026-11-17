@@ -72,3 +72,11 @@ def test_envelope_tracks_loudness():
     assert len(env) == 50
     assert max(env[:20]) < 0.3 and min(env[30:]) > 0.9
     assert FX.envelope(np.zeros(10, np.float32), sr) == []
+
+
+def test_setting_reads_new_and_old_keys():
+    assert AV.setting({}) == "medium"
+    assert AV.setting({"avatar": "off"}) == "off"
+    assert AV.setting({"avatar": "small"}) == "small"
+    assert AV.setting({"avatar_on": False, "avatar_size": "large"}) == "large"
+    assert AV.setting({"avatar": "bogus", "avatar_size": "nope"}) == "medium"
