@@ -39,6 +39,9 @@ jobs:
       - name: Compile check
         run: python -m compileall -q App
 
+      - name: Run tests
+        run: python -m pytest -q tests
+
       - name: Build the app
         run: |
           python packaging/make_version_info.py

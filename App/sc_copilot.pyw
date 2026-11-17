@@ -38,6 +38,8 @@ import sc_callouts as CO
 import sc_fx as FX
 import sc_log as L
 import sc_macros as MAC
+import sc_hud as HUD
+import sc_lines as LN
 import sc_nvidia as NV
 import sc_update as UPD
 import sc_version as VER
@@ -77,6 +79,7 @@ DEFAULTS = {
     "overlay_on": False, "overlay_corner": "top_right", "overlay_scale": 100, "overlay_opacity": 82, "overlay_only_in_game": True,
     "overlay_callout_secs": 8, "trade_system": "auto", "run_as_admin": False,
     "ai_mode": "own_key", "license_key": "", "check_updates": True, "last_update_check": 0, "setup_done": False,
+    "personality": "standard", "lines": {}, "hud_profiles": {}, "hud_watch": False,
 }
 STT_MODELS = [("tiny.en", "Tiny (fastest, rougher)"), ("base.en", "Base (good balance)"), ("small.en", "Small (most accurate, slower)")]
 STT_DEVICES = [("cpu", "CPU (recommended)"), ("cuda", "NVIDIA GPU (needs CUDA 12 + cuDNN 9)")]
@@ -311,7 +314,7 @@ def models_dir():
 
 class App:
     TABS = [("overview", "Overview"), ("contracts", "Contracts"), ("combat", "Combat"), ("history", "History"), ("trade", "Trade"),
-            ("copilot", "Co-Pilot"), ("macros", "Macros"), ("controls", "Controls"), ("settings", "Settings")]
+            ("copilot", "Co-Pilot"), ("macros", "Macros"), ("lines", "Personality"), ("controls", "Controls"), ("settings", "Settings")]
     DATA_TABS = ("overview", "contracts", "combat", "history")
 
     def __init__(self, root):
@@ -347,6 +350,11 @@ class App:
         self.uex = T.Uex()
         self.uex_extra = T.UexExtra(self.uex)
         self.overlay = OV.Overlay(root, lambda: self.settings, B.game_window)
+        self.hud = HUD.Reader(lambda: self.settings, lambda: (self.state.ship or {}).get("name", ""))
+        self.hud.watch_ok = lambda: bool(self.state.running)
+        self.hud.on_shields_down = lambda: self.settings.get("callouts", {}).get("combat", True) and self.callout(
+            LN.line(self.settings, "target_shields_down"))
+        self.hud.start_watch()
         self.nv = None
         self.overlay_diag_t = 0.0
 
@@ -476,6 +484,8 @@ class App:
             self.refresh_controls()
         elif key == "macros":
             self.refresh_macros()
+        elif key == "lines":
+            self.refresh_lines()
         elif key == "trade":
             self.draw_trade_chips()
 
@@ -1151,7 +1161,178 @@ class App:
             if miss:
                 txt += "\nSome are missing. Close this app, run Install.bat, then start it again. The dashboard works without them."
             label(c, txt, "small", "low" if miss else "good", justify="left").pack(anchor="w", pady=(px(8), 0))
+        self.render_hud_card(p)
         self.render_about(p)
+
+    def render_hud_card(self, p):
+        s = self.settings
+        c = self.scard(p, "Target reader (beta)")
+        label(c, "Reads your locked target's shield and hull off the HUD, so you can ask “are his shields down?”, “how's his hull?” "
+                 "or “target status”. It only looks at the two small boxes you draw. Nothing is saved or sent anywhere.",
+              "small", "text", wraplength=px(900), justify="left").pack(anchor="w", pady=(px(4), px(4)))
+        profs = s.get("hud_profiles") or {}
+        ship = (self.state.ship or {}).get("name", "")
+        rt = self.srow(c, "Setup", "Lock a target with full shields, click Capture, and switch to the game.")
+        names = ["any ship" if k == "default" else k for k in profs]
+        label(rt, ("Set up for: " + ", ".join(names)) if names else "Not set up yet.", "small_bold", "good" if names else "low").pack(anchor="w")
+        row = tk.Frame(rt, bg=rt["bg"])
+        row.pack(anchor="w", pady=(px(4), 0))
+        FlatButton(row, "Capture in 5 seconds", lambda: self.hud_capture(5), "primary", font=F["small_bold"], padx=12, pady=4).pack(side="left", padx=(0, px(6)))
+        if profs:
+            FlatButton(row, "Read it now (3 s)", self.hud_test, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(0, px(6)))
+            FlatButton(row, "Remove setup", self.hud_remove, "ghost", font=F["small_bold"], padx=10, pady=4).pack(side="left")
+        label(rt, f"Setup saves for the ship you're in now ({ship or 'unknown, so it applies to any ship'}). Each ship or seat can have "
+                  "its own boxes. Works best in space; a bright planet behind the HUD can throw it off.", "small", "dim",
+              wraplength=px(620), justify="left").pack(anchor="w", pady=(px(4), 0))
+        rt = self.srow(c, "Callout")
+        hv = tk.BooleanVar(value=s.get("hud_watch", False))
+        check(rt, "Say when the target's shields drop", hv, lambda: self.set_and_save("hud_watch", bool(hv.get()))).pack(anchor="w")
+
+    def hud_capture(self, delay=5):
+        if not HUD.WIN:
+            self.toast("The target reader only works on Windows.")
+            return
+        self.toast(f"Switch to Star Citizen now and keep a target locked with full shields. Capturing in {delay} seconds…")
+
+        def go():
+            time.sleep(delay)
+            mon = OV.monitor_rect(B.game_window())
+            if not mon:
+                import ctypes
+                mon = (0, 0, ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1))
+            l, t, r, b = mon
+            try:
+                img = HUD.capture((l, t, r - l, b - t))
+            except Exception as ex:
+                img = None
+                print(f"[{time.strftime('%H:%M:%S')}] hud capture failed: {ex}", flush=True)
+            self.ui(("call", lambda: self.open_hud_setup(img, (l, t)) if img is not None else self.toast("Couldn't capture the screen.")))
+        threading.Thread(target=go, daemon=True).start()
+
+    def hud_test(self):
+        self.toast("Reading in 3 seconds. Switch to the game with a target locked.")
+
+        def go():
+            time.sleep(3)
+            r = self.hud.read()
+            self.ui(("toast", r.get("text", "No reading.")))
+            self.speaker.say(r.get("text", ""), priority=True)
+        threading.Thread(target=go, daemon=True).start()
+
+    def hud_remove(self):
+        profs = dict(self.settings.get("hud_profiles") or {})
+        ship = (self.state.ship or {}).get("name", "")
+        key = ship if ship in profs else "default" if "default" in profs else next(iter(profs), None)
+        if key and messagebox.askyesno(APP_NAME, f"Remove the target reader setup for {'any ship' if key == 'default' else key}?", parent=self.root):
+            profs.pop(key, None)
+            self.set_and_save("hud_profiles", profs)
+            self.uiq.put(("rerender_settings", None))
+
+    def open_hud_setup(self, img, origin):
+        import base64
+        import struct
+        import zlib
+        import numpy as np
+        h, w = img.shape[:2]
+        step = max(1, int(np.ceil(max(w / px(1100), h / px(600)))))
+        small = np.ascontiguousarray(img[::step, ::step])
+        sh, sw = small.shape[:2]
+        raw = b"".join(b"\x00" + small[y].tobytes() for y in range(sh))
+
+        def chunk(t, d):
+            return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+        png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", sw, sh, 8, 2, 0, 0, 0))
+               + chunk(b"IDAT", zlib.compress(raw, 1)) + chunk(b"IEND", b""))
+        win = tk.Toplevel(self.root)
+        win.title("Target reader setup")
+        win.configure(bg=C["bg"])
+        win.transient(self.root)
+        photo = tk.PhotoImage(data=base64.b64encode(png))
+        win._photo = photo
+        top = label(win, "", "base", "hi", "bg", wraplength=sw, justify="left")
+        top.pack(anchor="w", padx=px(12), pady=(px(10), px(4)))
+        cv = tk.Canvas(win, width=sw, height=sh, bg="black", highlightthickness=0, cursor="crosshair")
+        cv.pack(padx=px(12))
+        cv.create_image(0, 0, image=photo, anchor="nw")
+        info = label(win, "", "small", "muted", "bg", wraplength=sw, justify="left")
+        info.pack(anchor="w", padx=px(12), pady=px(4))
+        nav = tk.Frame(win, bg=C["bg"])
+        nav.pack(fill="x", padx=px(12), pady=(0, px(12)))
+        st = {"step": "shield", "start": None, "rect_id": None, "box": None, "result": {}}
+        steps = {"shield": ("Step 1 of 2: drag a box tightly around the target's SHIELD display.", "color"),
+                 "hull": ("Step 2 of 2: drag a box tightly around the target's HULL display.", "any")}
+        nxt = FlatButton(nav, "Next", lambda: advance(), "primary", font=F["small_bold"], padx=12, pady=4)
+        skip = FlatButton(nav, "Skip hull", lambda: finish(), "ghost", font=F["small_bold"], padx=10, pady=4)
+        FlatButton(nav, "Cancel", win.destroy, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="left")
+        nxt.pack(side="right")
+
+        def show_step():
+            top.config(text=steps[st["step"]][0])
+            info.config(text="Click and drag on the picture. You can redraw it as many times as you like.", fg=C["muted"])
+            nxt.config(state="disabled", text="Next" if st["step"] == "shield" else "Save")
+            if st["step"] == "hull":
+                skip.pack(side="right", padx=(0, px(8)))
+
+        def press(e):
+            st["start"] = (e.x, e.y)
+            if st["rect_id"]:
+                cv.delete(st["rect_id"])
+            st["rect_id"] = cv.create_rectangle(e.x, e.y, e.x, e.y, outline=C["accent"], width=2)
+
+        def drag(e):
+            if st["start"] and st["rect_id"]:
+                cv.coords(st["rect_id"], st["start"][0], st["start"][1], e.x, e.y)
+
+        def release(e):
+            if not st["start"]:
+                return
+            x0, y0 = st["start"]
+            x1, y1 = min(max(e.x, 0), sw), min(max(e.y, 0), sh)
+            st["start"] = None
+            bx, by, bw, bh = min(x0, x1) * step, min(y0, y1) * step, abs(x1 - x0) * step, abs(y1 - y0) * step
+            if bw < 6 or bh < 6:
+                info.config(text="That box is too small. Drag a bigger one.", fg=C["toss"])
+                return
+            crop = img[by:by + bh, bx:bx + bw]
+            try:
+                cal = HUD.calibrate_region(crop, steps[st["step"]][1])
+            except ValueError as ex:
+                info.config(text=str(ex), fg=C["toss"])
+                nxt.config(state="disabled")
+                return
+            st["result"][st["step"]] = {"rect": [origin[0] + bx, origin[1] + by, bw, bh], "cal": cal}
+            what = "shield display" if st["step"] == "shield" else "hull display"
+            info.config(text=f"✓ Got the {what} ({cal['full']} lit pixels counted as full). Click {'Next' if st['step'] == 'shield' else 'Save'}.",
+                        fg=C["good"])
+            nxt.config(state="normal")
+
+        def advance():
+            if st["step"] == "shield":
+                st["step"] = "hull"
+                if st["rect_id"]:
+                    cv.delete(st["rect_id"])
+                    st["rect_id"] = None
+                show_step()
+            else:
+                finish()
+
+        def finish():
+            if "shield" not in st["result"]:
+                return
+            ship = (self.state.ship or {}).get("name", "") or "default"
+            profs = dict(self.settings.get("hud_profiles") or {})
+            profs[ship] = dict(st["result"])
+            profs.setdefault("default", dict(st["result"]))
+            self.set_and_save("hud_profiles", profs)
+            win.destroy()
+            self.uiq.put(("rerender_settings", None))
+            self.toast("Target reader is set up. Try saying “target status”.")
+        cv.bind("<ButtonPress-1>", press)
+        cv.bind("<B1-Motion>", drag)
+        cv.bind("<ButtonRelease-1>", release)
+        show_step()
+        win.update_idletasks()
+        win.geometry(f"+{self.root.winfo_rootx() + px(20)}+{self.root.winfo_rooty() + px(20)}")
 
     def render_about(self, p):
         s = self.settings
@@ -1672,7 +1853,7 @@ class App:
         self.preview_voice()
 
     def preview_voice(self):
-        self.speaker.say("Co-pilot online. Leaving armistice, weapons free.", priority=True)
+        self.speaker.say(LN.line(self.settings, "greeting"), priority=True)
 
     def download_kokoro(self):
         if self.kokoro.downloading:
@@ -1708,7 +1889,7 @@ class App:
     # ------------------------------------------------------------------ macros
     def run_macro(self, m):
         if self.macro_running:
-            self.speaker.say("A macro's already running.", priority=True)
+            self.speaker.say(LN.line(self.settings, "macro_busy"), priority=True)
             return
 
         def go():
@@ -1728,6 +1909,176 @@ class App:
             finally:
                 self.macro_running = False
         threading.Thread(target=go, daemon=True, name="macro").start()
+
+    # ------------------------------------------------------------------ personality and lines
+    SAMPLE = {"victim": "Cutlass Black", "n": 3, "name": "Eliminate the Vanduul threat.", "killer": "Stormwind",
+              "a_victim": "a Gladius", "who": "Shadow", "amount": "twenty thousand", "text": "Reach the comm array.",
+              "shields": "down", "hull": "40 percent"}
+
+    def build_lines(self, p):
+        self.lines_frame = ScrollFrame(p, C["bg"])
+        self.lines_frame.pack(fill="both", expand=True)
+
+    def refresh_lines(self):
+        if "lines" in self.frames:
+            self.lines_frame.swap(self.render_lines)
+
+    def render_lines(self, p):
+        s = self.settings
+        head = self.section(p, "Personality", "How your co-pilot talks. Pick a character, then change any line you like.")
+        FlatButton(head, "Reset all my edits", self.reset_lines, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="right")
+        FlatButton(head, "Export my lines…", self.export_lines, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="right", padx=(0, px(6)))
+        FlatButton(head, "Import lines…", self.import_lines, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="right", padx=(0, px(6)))
+        grid = tk.Frame(p, bg=C["bg"])
+        grid.pack(fill="x")
+        cur = s.get("personality") or "standard"
+        for i, (pid, pers) in enumerate(LN.PERSONALITIES.items()):
+            c = card(grid, padx=px(14), pady=px(10))
+            c.grid(row=i // 3, column=i % 3, sticky="nsew", padx=(0 if i % 3 == 0 else px(8), 0), pady=(0, px(8)))
+            grid.columnconfigure(i % 3, weight=1, uniform="pers")
+            label(c, pers["name"], "h2", "accent" if pid == cur else "hi").pack(anchor="w")
+            label(c, pers["desc"], "small", "muted", wraplength=px(300), justify="left").pack(anchor="w", pady=(px(2), px(8)))
+            row = tk.Frame(c, bg=C["card"])
+            row.pack(anchor="w")
+            if pid == cur:
+                label(row, "✓ In use", "small_bold", "good").pack(side="left", padx=(0, px(8)))
+            else:
+                FlatButton(row, "Use", lambda v=pid: self.set_personality(v), "primary", font=F["small_bold"], padx=12, pady=3).pack(side="left", padx=(0, px(6)))
+            FlatButton(row, "Hear it", lambda v=pid: self.hear_personality(v), "normal", font=F["small_bold"], padx=10, pady=3).pack(side="left")
+        label(p, "Your own edits below always win over the personality. Put | between versions and it picks one at random, "
+                 "like  Gear down.|Wheels out.   Words in {braces} get filled in, like {victim} or {n}. Leave a box empty to go back to "
+                 "the personality's line.", "small", "muted", "bg", wraplength=px(1100), justify="left").pack(anchor="w", pady=(px(6), px(6)))
+        sr = tk.Frame(p, bg=C["bg"])
+        sr.pack(fill="x", pady=(0, px(6)))
+        label(sr, "Find a line:", "small_bold", "hi", "bg").pack(side="left")
+        search = entry(sr, width=30)
+        search.pack(side="left", padx=(px(8), 0), ipady=px(2))
+        rows = []
+        mine = s.get("lines") or {}
+        for group, items in LN.editor_rows():
+            g = label(p, group.upper(), "label", "muted", "bg")
+            g.pack(anchor="w", pady=(px(10), px(4)))
+            c = card(p, padx=px(14), pady=px(6))
+            c.pack(fill="x")
+            rows.append((g, c, group.lower(), None))
+            for key, lbl, default, ph in items:
+                r = tk.Frame(c, bg=C["card"])
+                r.pack(fill="x", pady=px(2))
+                left = tk.Frame(r, bg=C["card"], width=px(250))
+                left.pack(side="left", fill="y")
+                left.pack_propagate(False)
+                label(left, lbl, "small_bold", "hi", anchor="w").pack(anchor="w")
+                if ph:
+                    label(left, ph, "tiny_bold", "dim", anchor="w").pack(anchor="w")
+                e = entry(r, width=70)
+                edited = bool(str(mine.get(key, "")).strip())
+                e.insert(0, LN.raw(s, key))
+                e.config(fg=C["accent"] if edited else C["text"])
+                e.pack(side="left", fill="x", expand=True, ipady=px(2))
+                e.bind("<FocusOut>", lambda ev, k=key, w=e: self.save_line(k, w))
+                e.bind("<Return>", lambda ev, k=key, w=e: self.save_line(k, w))
+                FlatButton(r, "▶", lambda k=key, w=e: (self.save_line(k, w), self.hear_line(k)), "normal", font=F["small_bold"],
+                           padx=8, pady=2).pack(side="left", padx=(px(6), 0))
+                FlatButton(r, "Reset", lambda k=key: self.reset_line(k), "ghost", font=F["small_bold"], padx=8, pady=2).pack(side="left", padx=(px(4), 0))
+                rows.append((r, c, f"{lbl} {default} {LN.raw(s, key)}".lower(), r))
+
+        def filt(_e=None):
+            q = search.get().strip().lower()
+            shown_cards = set()
+            for w, parent, hay, is_row in rows:
+                if is_row is None:
+                    continue
+                if not q or q in hay:
+                    shown_cards.add(parent)
+            for w, parent, hay, is_row in rows:
+                if is_row is None:
+                    if parent in shown_cards:
+                        w.pack(anchor="w", pady=(px(10), px(4)))
+                        parent.pack(fill="x")
+                    else:
+                        w.pack_forget()
+                        parent.pack_forget()
+                else:
+                    w.pack_forget()
+            for w, parent, hay, is_row in rows:
+                if is_row is not None and (not q or q in hay):
+                    w.pack(fill="x", pady=px(2))
+        search.bind("<KeyRelease>", filt)
+
+    def set_personality(self, pid):
+        self.set_and_save("personality", pid)
+        self.refresh_lines()
+        self.hear_personality(pid)
+
+    def hear_personality(self, pid):
+        tmp = {"personality": pid, "lines": {}}
+        self.speaker.say(LN.line(tmp, "greeting"), priority=True)
+        self.speaker.say(LN.line(tmp, "arm_off"))
+        self.speaker.say(LN.line(tmp, "kill_n", **self.SAMPLE))
+
+    def hear_line(self, key):
+        if key.startswith("ack."):
+            text = LN.ack(self.settings, key[4:])
+        else:
+            text = LN.line(self.settings, key, **self.SAMPLE)
+        self.speaker.say(text or "That line is empty.", priority=True)
+
+    def save_line(self, key, w):
+        try:
+            val = w.get().strip()
+        except tk.TclError:
+            return
+        lines = dict(self.settings.get("lines") or {})
+        base = LN.raw({"personality": self.settings.get("personality"), "lines": {}}, key)
+        if not val or val == base:
+            lines.pop(key, None)
+            if not val:
+                w.delete(0, "end")
+                w.insert(0, base)
+            w.config(fg=C["text"])
+        else:
+            lines[key] = val[:400]
+            w.config(fg=C["accent"])
+        if lines != (self.settings.get("lines") or {}):
+            self.set_and_save("lines", lines)
+
+    def reset_line(self, key):
+        lines = dict(self.settings.get("lines") or {})
+        if lines.pop(key, None) is not None:
+            self.set_and_save("lines", lines)
+        self.refresh_lines()
+
+    def reset_lines(self):
+        if not (self.settings.get("lines") or {}):
+            self.toast("You haven't changed any lines.")
+            return
+        if messagebox.askyesno(APP_NAME, "Remove all your edited lines and go back to the personality's lines?", parent=self.root):
+            self.set_and_save("lines", {})
+            self.refresh_lines()
+
+    def export_lines(self):
+        f = filedialog.asksaveasfilename(parent=self.root, defaultextension=".json", initialfile="my-copilot-lines.json",
+                                         filetypes=[("SC Co-Pilot lines", "*.json")])
+        if not f:
+            return
+        try:
+            Path(f).write_text(LN.dumps_pack(self.settings, Path(f).stem), encoding="utf-8")
+            self.toast("Saved. Send the file to a friend and they can import it.")
+        except OSError as ex:
+            self.toast(f"Couldn't save: {ex}")
+
+    def import_lines(self):
+        f = filedialog.askopenfilename(parent=self.root, filetypes=[("SC Co-Pilot lines", "*.json"), ("All files", "*.*")])
+        if not f:
+            return
+        try:
+            n = LN.import_pack(self.settings, json.loads(Path(f).read_text(encoding="utf-8")))
+        except (OSError, ValueError) as ex:
+            self.toast(f"Couldn't import: {ex}")
+            return
+        save_settings(self.settings)
+        self.refresh_lines()
+        self.toast(f"Imported {n} lines.")
 
     def build_macros(self, p):
         self.macros_frame = ScrollFrame(p, C["bg"])
@@ -2154,12 +2505,30 @@ class App:
             if t_release:
                 self.ui(("tool", f"macro · heard in {stt:.1f}s"))
             return
+        if cmd["kind"] == "hud":
+            r = self.hud.read()
+            if r.get("ok") and r.get("visible"):
+                what = cmd.get("what", "both")
+                sh, hu = HUD.spoken_pct(r.get("shields")), HUD.spoken_pct(r.get("hull"))
+                if what == "shields" and sh == "down":
+                    say = LN.line(self.settings, "target_shields_down")
+                elif what == "shields":
+                    say = f"Target shields {sh}."
+                elif what == "hull":
+                    say = f"Target hull {hu}."
+                else:
+                    say = LN.line(self.settings, "target_status", shields=sh, hull=hu)
+            else:
+                say = r.get("text", "I can't read the target right now.")
+            self.ui(("copilot", say))
+            self.speaker.say(say, priority=True)
+            return
         if cmd["kind"] == "overlay":
             on = cmd.get("on")
             on = (not self.settings.get("overlay_on", False)) if on is None else on
             self.settings["overlay_on"] = on
             save_settings(self.settings)
-            say = "Overlay on." if on else "Overlay off."
+            say = LN.line(self.settings, "overlay_on" if on else "overlay_off")
             self.ui(("copilot", say))
             self.speaker.say(say, priority=True)
             return
@@ -2171,6 +2540,8 @@ class App:
             use, say = fb, cmd.get("fallback_say")
         ok, msg = self.binds.press(use["sc"])
         self.ui(("action", f"{use['label']}: {'pressed ' + msg if ok else 'NOT pressed, ' + msg}"))
+        if ok:
+            say = LN.ack(self.settings, use["id"], say or "") or None
         if not ok:
             say = self.press_problem(a, msg)
         if say:
@@ -2324,6 +2695,7 @@ class App:
 
     def on_close(self):
         self.closing = True
+        self.hud.stop_watch()
         try:
             self.settings["geometry"] = self.root.geometry()
             save_settings(self.settings)

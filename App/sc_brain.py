@@ -7,6 +7,7 @@ import time
 import urllib.parse
 from datetime import datetime
 
+import sc_lines as LN
 import sc_macros as MAC
 import sc_version as VER
 from sc_binds import ACTION_INDEX, ACTIONS
@@ -75,6 +76,8 @@ TRADE_TOOLS = [
 
 SYS_ENUM = {"type": "string", "enum": ["Stanton", "Pyro", "Nyx", "all"]}
 INFO_TOOLS = [
+    {"name": "get_target_status", "description": "Read the locked target's shield and hull level off the pilot's HUD (screen reading the pilot set up). Returns rough percentages, or says it isn't set up or can't see a target.",
+     "input_schema": {"type": "object", "properties": {}}},
     {"name": "find_services", "description": "Find stations, cities and outposts that have a service: refuel, repair, refinery, clinic, shops, food, habitation, cargo, trade. Optional star system and a 'near' place or planet name to sort closer matches first.",
      "input_schema": {"type": "object", "properties": {"service": {"type": "string"}, "system": SYS_ENUM, "near": {"type": "string"}}, "required": ["service"]}},
     {"name": "place_info", "description": "Details for a named station, city or outpost: what services it has, armistice, monitored, landing pad sizes, jurisdiction, faction.",
@@ -393,6 +396,9 @@ class Brain:
         notes = (s.get("pilot_notes") or "").strip()
         system = SYSTEM.format(name=s.get("assistant_name", "Co-Pilot"), handle=st.handle or "the pilot",
                                notes=f"\n\nWhat the pilot has told you about themselves: {notes}" if notes else "")
+        style = LN.ai_style(s)
+        if style:
+            system += f"\n\nPersonality: {style} Stay accurate and keep answers short; the personality is only how you say things."
         now = datetime.now().strftime("%a %H:%M")
         with st.lock:
             snap = st.snapshot_text()
@@ -551,6 +557,9 @@ class Brain:
                 return f"Couldn't get prices: {ex}"
             self.app.note_trade(out)
             return json.dumps(out)
+        if name == "get_target_status":
+            r = self.app.hud.read()
+            return json.dumps({k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items()})
         if name in ("find_services", "place_info", "ship_info", "item_where", "refinery_yields"):
             x = self.app.uex_extra
             sysname = inp.get("system")

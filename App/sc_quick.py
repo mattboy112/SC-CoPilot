@@ -192,6 +192,22 @@ def _match(t):
     return None
 
 
+TARGET_WORDS = r"(target|targets|his|her|their|enemy|enemys|enemies|bandit|bandits|hostile|hostiles|they|he|she|its|that ships|that ship)"
+
+
+def hud_request(t):
+    """'target status', 'are his shields down', 'how's the target's hull' -> 'both' / 'shields' / 'hull'."""
+    if re.search(r"\b(target status|status (on|of) (the )?target|check (the )?target|target report)\b", t):
+        return "both"
+    m = re.search(r"\b" + TARGET_WORDS + r" (shields|hull)\b", t) or re.search(r"\b(shields|hull) (on|of) (the )?" + TARGET_WORDS + r"\b", t)
+    if not m:
+        return None
+    asking = re.search(r"\b(how|hows|what|whats|are|is|did|does|check|status|left|down|up|gone|holding|at)\b", t)
+    if not asking:
+        return None
+    return "shields" if "shields" in m.group(0) else "hull"
+
+
 def parse(text, name="Co-Pilot", macros=None):
     raw = text.lower().strip(" .!?")
     m = M.match(text, macros, name)
@@ -209,6 +225,9 @@ def parse(text, name="Co-Pilot", macros=None):
     t0 = _clean(text, name)
     if re.search(r"\b(whos|who is|who the hell is) (shooting|attacking|firing|hitting|on)( at)? (me|us)\b", t0):
         return {"kind": "press", "action": "target_attacker", "say": None}
+    hud = hud_request(t0)
+    if hud:
+        return {"kind": "hud", "what": hud}
     if "?" in text or QUESTION.match(raw) or QUESTION.match(t0):
         return None
     if re.search(r"\b(and|then|after|before|while|but|if|unless)\b", t0):

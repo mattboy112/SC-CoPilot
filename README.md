@@ -27,6 +27,8 @@ It checks for updates by itself and installs them in one click (Settings → Abo
 - **Dashboard.** Overview, Contracts, Combat and a 30-day History, all read from the game's log file.
 - **Trade & mining prices.** Live player-reported prices from [UEX](https://uexcorp.space/), with best sell/buy spots and routes.
 - **In-game overlay.** A click-through panel with your zone, current objective, quantum status and the last thing the co-pilot said.
+- **Personalities.** Pick how your co-pilot talks: Ship AI, Fleet officer, Laid-back hauler, Deadpan AI, Corporate assistant or Pyro outlaw. You can rewrite any callout or reply, give lines several versions to pick from at random, and share your lines with friends as a file.
+- **Target reader (beta).** Ask "are his shields down?", "how's his hull?" or "target status". You draw a box around your target's shield and hull displays once, and it reads them off your screen. It can also call out when the target's shields drop.
 - **Your keybinds, untouched.** It reads your own binds, so it presses what you've set. It can also give spare keys to the actions Star Citizen leaves unbound, like separate gear up and gear down, but only when you ask. It backs up your bindings file first.
 
 ## The AI: your choice
@@ -57,7 +59,7 @@ Every voice can run through an effect: cockpit AI, ship computer, helmet comms o
 
 ## What it can and can't see
 
-Star Citizen has no official data feed. Everything comes from `Game.log`, the file the game writes for its own debugging. The app can see your ship, zones, quantum travel, contracts and objectives, ship kills and losses, deaths, purchases, party and aUEC transfers. It **can't** see shields, hull, fuel, ammo, your wallet balance or on-foot kills, because the game doesn't log them. What gets logged can change between patches.
+Star Citizen has no official data feed. Most of what it knows comes from `Game.log`, the file the game writes for its own debugging. That covers your ship, zones, quantum travel, contracts and objectives, ship kills and losses, deaths, purchases, party and aUEC transfers. The log has no shields, hull, fuel, ammo, wallet balance or on-foot kills. The one exception is your *target's* shields and hull, which the optional target reader gets by looking at the boxes you drew on your HUD. What gets logged can change between patches.
 
 ## Fair play and privacy
 
