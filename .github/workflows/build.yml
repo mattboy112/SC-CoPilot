@@ -1,0 +1,78 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: packaging/requirements-build.txt
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r packaging/requirements-build.txt
+
+      - name: Version must match the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          V=$(python -c "import sys; sys.path.insert(0, 'App'); import sc_version; print(sc_version.VERSION)")
+          if [ "v$V" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME doesn't match sc_version.VERSION ($V)"; exit 1
+          fi
+
+      - name: Compile check
+        run: python -m compileall -q App
+
+      - name: Build the app
+        run: |
+          python packaging/make_version_info.py
+          pyinstaller --noconfirm --clean packaging/sc_copilot.spec --distpath dist --workpath build
+
+      - name: Self-test the packaged app
+        shell: pwsh
+        run: |
+          $env:SC_COPILOT_HOME = "$env:RUNNER_TEMP\sc_home"
+          $p = Start-Process -FilePath "dist\SC Co-Pilot\SC Co-Pilot.exe" -ArgumentList "--selftest" -PassThru -Wait
+          Get-Content "$env:SC_COPILOT_HOME\logs\selftest.txt" -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { Write-Error "Self-test failed (exit $($p.ExitCode))"; exit 1 }
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $v = python -c "import sys; sys.path.insert(0, 'App'); import sc_version; print(sc_version.VERSION)"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DMyAppVersion=$v" packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SC_CoPilot_Setup
+          path: dist/SC_CoPilot_Setup_*.exe
+
+      - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python packaging/release_notes.py
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/SC_CoPilot_Setup_*.exe
+          body_path: release_notes.md

@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+build/
+dist/
+packaging/version_info.txt
+release_notes.md
+userdata/
+portable.txt
+
+# personal data from running out of the source folder (older builds)
+App/sc_settings.json
+App/sc_settings.*.tmp
+App/*.log
+App/sc_default_binds_cache.json
+App/sc_history_cache.json
+App/sc_edge_voices.json
+App/sc_uex_*.json
+App/sc_nvfix_result.json
+App/models/
+App/sc_binds_test_copy.py
