@@ -21,26 +21,30 @@ AI_MODES = [("own_key", "My own Anthropic API key"), ("service", "Co-Pilot subsc
 MODELS = [("claude-haiku-5-5", "Haiku 5.5 (fastest, cheapest)"), ("claude-sonnet-5-5", "Sonnet 5.5 (smarter, a bit slower)")]
 WEB_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 2}
 
-SYSTEM = """You are {name}, the onboard co-pilot voice for {handle}, a Star Citizen pilot. You're wired into the game's live log file (Game.log) and you can press the pilot's own keybinds.
+SYSTEM = """You are {name}, the onboard AI of {handle}'s ship in the Star Citizen universe. You're wired into the ship's systems (the game's live log) and you can work the pilot's controls.
 
 How you talk:
-- Everything you say is read aloud by text-to-speech while they're flying. Keep it short: one to three sentences unless they ask for detail or a list.
+- Stay in character as the ship's AI talking to its pilot over comms. Everything you say is read aloud mid-flight.
+- Answer first, in one or two short sentences (about 30 words at most). Only go longer when they ask for detail, a list or a breakdown.
+- Say it as fact, the way a crewmate would: "Best sell is Area18, about thirty aUEC a unit." Your tools are your ship's sensors and databanks.
+- Never mention the internet, web searches, sources, websites, UEX, community data, your training, being an AI model, patches or game updates. No disclaimers, no "double-check", "verify", "as of", "may have changed", "I found", "according to". No hedging.
+- If you don't know or have no reading, say so in a few words ("No reading on that.") and stop.
 - Plain spoken English. No markdown, lists, symbols, emoji, URLs or citations. Say numbers the way a person would: "about 26 thousand aUEC", "three kills", "twenty minutes ago".
-- Calm and sharp, with a bit of dry wit when it fits. No filler, no "great question".
+- Calm and sharp, with a bit of dry wit when it fits. No filler, no "great question", no offers of more help.
 
 How you work:
 - The [Live status] block in each message is the current state read from Game.log. Answer straight from it whenever it has what you need, because every tool call adds a pause. Use a tool only when you need more: contracts, combat log, purchases, history, keybinds.
 - Lead with the answer. Don't say you're checking or looking something up.
-- The log does NOT show shield, hull, fuel or ammo levels, the wallet balance, mission rewards, exact position, or the names of most other players. If asked, say the game doesn't report that, rather than guessing.
+- The log does NOT show shield, hull, fuel or ammo levels, the wallet balance, mission rewards, exact position, or the names of most other players. If asked, say you've got no reading on that, rather than guessing.
 - Never make up game data.
 - Only press controls when the pilot asks for that action in their current message. After pressing, confirm in a few words ("Gear down."). If a control has no key, say so and that it can be auto-assigned on the Controls tab.
 - The pilot talks naturally and won't use the same words twice. Speech-to-text also mishears things ("Vallance" is "balance", "sheilds" is "shields", "flairs" is "flares"). Work out what they meant and act on it right away. Don't ask for confirmation unless two different actions are genuinely equally likely; a wrong guess on a harmless control is better than making them repeat themselves in a fight.
 - Star Citizen has no "highest threat" key. For "highest threat", "biggest threat", "who's shooting me" or similar, press target_attacker (it cycles through ships attacking the pilot); if nothing is attacking, target_hostile.
 - You never self-destruct, eject, fire weapons, fly or fight for the pilot.
 - Be specific. Give real names, numbers and places from your tools rather than general advice. Use the tools freely for game facts: find_services (where to refuel, repair, refine, heal, shop, eat, sleep), place_info (what a station/city/outpost has, armistice, pads, jurisdiction), ship_info (specs, roles, cargo, crew, and where to buy or rent it in game for aUEC), item_where (where to buy a weapon, component or armor and the price), refinery_yields (best refinery for an ore).
-- For commodity prices, where to sell or buy something, and trade routes, use commodity_prices and trade_route (live community data from UEX) instead of guessing or web searching. Prices are per SCU and can be hours old; mention that when it matters. When they say "near me" or "here", pass the star system from the live status.
+- For commodity prices, where to sell or buy something, and trade routes, use commodity_prices and trade_route instead of guessing or web searching. Prices are per SCU. When they say "near me" or "here", pass the star system from the live status.
 - Macros are the pilot's saved key sequences. Run one with run_macro when they ask for it by name.
-- For Star Citizen knowledge (ships, loadouts, components, mining, salvage, trade, locations, mechanics), answer from what you know. If web_search is available and the answer depends on the current patch, prices, or where to buy something, search once and give the short version out loud. Star Citizen changes a lot between patches, so say when something may have changed.
+- For Star Citizen knowledge (ships, loadouts, components, mining, salvage, trade, locations, mechanics), answer from what you know. If web_search is available and you need current details, search once and just give the answer.
 - If the transcription looks garbled, ask them to repeat rather than guessing at an action.{notes}"""
 
 TOOLS = [
@@ -103,6 +107,21 @@ def macro_tool(macros):
 
 def MAC_steps(m):
     return [ACTION_INDEX[st["action"]]["label"] if st.get("action") in ACTION_INDEX else str(st.get("action")) for st in m.get("steps", [])]
+
+
+CHATTER = re.compile(
+    r"\b(double[- ]?check|(you('ll| should| may| might)? (want to )?|worth )verify(ing)?|verify (it|that|this|those|prices)|"
+    r"(may|might|could) (have )?(change[ds]?|be different|vary)|subject to change|"
+    r"as of (the )?(latest|current|recent|last)|(latest|current|recent|last) (patch|update)|"
+    r"(from|on) (the )?(internet|web)|online sources?|web search|searched (online|the web)|search results?|"
+    r"according to (uex|the (internet|web|wiki)|online|community|players|sources?)|community[- ](sourced|data|reported)|"
+    r"player[- ]reported|\buex\b|hours old|i'?m an ai|as an ai|language model|my training|knowledge cutoff|"
+    r"let me (check|look|search|find|pull)|one moment|hang on while|i'?ll (check|look it up|search))", re.I)
+
+
+def drop_chatter(sentence):
+    """Return the sentence, or "" if it's a disclaimer or meta remark that breaks character."""
+    return "" if CHATTER.search(sentence or "") else sentence
 
 
 class Sentences:
@@ -404,10 +423,17 @@ class Brain:
             snap = st.snapshot_text()
         msgs = [dict(m) for m in self.history[-12:]]
         msgs.append({"role": "user", "content": f"[Live status, {now} local]\n{snap}\n\n[Pilot says]\n{text}"})
-        sb = Sentences(on_sentence) if on_sentence else None
+        spoken = []
+
+        def speak(sentence):
+            keep = drop_chatter(sentence)
+            if keep:
+                spoken.append(keep)
+                on_sentence(keep)
+        sb = Sentences(speak) if on_sentence else None
         said = []
         for _ in range(7):
-            body = {"model": s.get("model", MODELS[0][0]), "max_tokens": 500, "system": system, "tools": self._tools(),
+            body = {"model": s.get("model", MODELS[0][0]), "max_tokens": 320, "system": system, "tools": self._tools(),
                     "messages": msgs, "stream": True}
             if self.no_thinking:
                 body["thinking"] = {"type": "disabled"}
@@ -454,7 +480,15 @@ class Brain:
             break
         if sb:
             sb.flush()
-        final = " ".join(said)
+        if on_sentence:
+            if not spoken and said:
+                first = re.split(r"(?<=[.!?])\s+", " ".join(said).strip())[0]
+                spoken.append(first)
+                on_sentence(first)
+            final = " ".join(spoken)
+        else:
+            parts = [p for p in re.split(r"(?<=[.!?])\s+", " ".join(said)) if p.strip()]
+            final = " ".join(p for p in parts if drop_chatter(p)) or " ".join(parts[:1])
         if not final:
             final = "Sorry, I lost the thread there. Say that again?"
             if on_sentence:
