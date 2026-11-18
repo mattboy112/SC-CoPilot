@@ -19,7 +19,15 @@ export function usageFromEvent(ev) {
   return null;
 }
 
-export function meterStream(onDone) {
+export function toolUseId(ev) {
+  if (ev && ev.type === "content_block_start" && ev.content_block && ev.content_block.type === "tool_use") {
+    const id = ev.content_block.id;
+    if (typeof id === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(id)) return id;
+  }
+  return null;
+}
+
+export function usageScanner(onToolUse = () => {}) {
   const decoder = new TextDecoder();
   let buf = "";
   const total = emptyUsage();
@@ -32,29 +40,45 @@ export function meterStream(onDone) {
       if (!line.startsWith("data:")) continue;
       const data = line.slice(5).trim();
       if (!data || data === "[DONE]") continue;
+      let ev;
       try {
-        mergeUsage(total, usageFromEvent(JSON.parse(data)));
+        ev = JSON.parse(data);
       } catch {
+        continue;
       }
+      mergeUsage(total, usageFromEvent(ev));
+      const id = toolUseId(ev);
+      if (id) onToolUse(id);
     }
   };
-  return new TransformStream({
-    transform(chunk, controller) {
-      controller.enqueue(chunk);
-      scan(decoder.decode(chunk, { stream: true }));
-    },
-    flush() {
+  return {
+    push: (chunk) => scan(decoder.decode(chunk, { stream: true })),
+    done: () => {
       scan(decoder.decode() + "\n");
-      onDone(total);
+      return total;
     },
-  });
+  };
 }
 
-export function isNewQuestion(body) {
-  const msgs = Array.isArray(body.messages) ? body.messages : [];
+export async function meterBody(stream, onToolUse) {
+  const scanner = usageScanner(onToolUse);
+  const reader = stream.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      scanner.push(value);
+    }
+  } catch {
+  }
+  return scanner.done();
+}
+
+export function toolResultIds(body) {
+  const msgs = body && Array.isArray(body.messages) ? body.messages : [];
   const last = msgs[msgs.length - 1];
-  if (!last || last.role !== "user") return false;
-  if (typeof last.content === "string") return true;
-  if (!Array.isArray(last.content)) return false;
-  return !last.content.some((b) => b && b.type === "tool_result") && last.content.some((b) => b && b.type === "text");
+  if (!last || last.role !== "user" || !Array.isArray(last.content) || !last.content.length) return [];
+  if (!last.content.every((b) => b && b.type === "tool_result")) return [];
+  const ids = last.content.map((b) => String(b.tool_use_id || ""));
+  return [...new Set(ids)];
 }

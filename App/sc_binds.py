@@ -461,7 +461,7 @@ if sys.platform == "win32":
             return _pid_cache["pids"]
         pids = set()
         try:
-            out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq StarCitizen.exe", "/FO", "CSV", "/NH"], capture_output=True,
+            out = subprocess.run([P.system_exe("tasklist.exe"), "/FI", "IMAGENAME eq StarCitizen.exe", "/FO", "CSV", "/NH"], capture_output=True,
                                  text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=5).stdout
             for line in out.splitlines():
                 parts = [x.strip('"') for x in line.split('","')]

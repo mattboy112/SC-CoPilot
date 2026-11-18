@@ -197,21 +197,16 @@ PERSONALITIES = {
 }
 
 
-class _Safe(dict):
-    def __missing__(self, key):
-        return ""
-
-
 def _pick(text):
     options = [o.strip() for o in str(text).split("|") if o.strip()]
     return random.choice(options) if options else ""
 
 
+_PLACEHOLDER = re.compile(r"\{(\w{1,40})\}")
+
+
 def _fill(text, vals):
-    try:
-        out = text.format_map(_Safe(vals))
-    except (ValueError, IndexError):
-        out = text
+    out = _PLACEHOLDER.sub(lambda m: str(vals.get(m.group(1), "")), str(text))
     return re.sub(r"\s+", " ", out).strip()
 
 
@@ -267,6 +262,13 @@ def export_pack(settings, name="My co-pilot"):
     p = (settings or {}).get("personality") or "standard"
     lines = {k: v for k, v in ((settings or {}).get("lines") or {}).items() if str(v).strip()}
     return {"sc_copilot_lines": 1, "name": name, "personality": p, "lines": lines}
+
+
+_PACK_PATH = re.compile(r"^packs/[a-z0-9][a-z0-9-]{0,80}\.json$")
+
+
+def safe_pack_path(path):
+    return isinstance(path, str) and bool(_PACK_PATH.fullmatch(path)) and path != "packs/index.json"
 
 
 def import_pack(settings, data):

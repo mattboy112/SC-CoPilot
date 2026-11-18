@@ -8,16 +8,32 @@ export const TIERS = {
 };
 
 export const PRICES = {
-  "claude-haiku-5-5": { in: 0.1, out: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
-  "claude-sonnet-5-5": { in: 2.0, out: 10.0, cacheRead: 0.1, cacheWrite: 2.5 },
+  "claude-haiku-5-5": { in: 0.1, out: 0.5, cacheRead: 0.01, cacheWrite: 0.125, longContext: true },
+  "claude-sonnet-5-5": { in: 2.0, out: 10.0, cacheRead: 0.1, cacheWrite: 2.5, longContext: false },
 };
 export const WEB_SEARCH_USD = 0.01;
+export const LONG_CONTEXT_TOKENS = 100_000;
+export const LONG_CONTEXT_MULT = 5;
+export const WEB_RESULT_TOKENS = 30_000;
+export const TOOL_PROMPT_TOKENS = 2_000;
 
 export const MAX_TOKENS = 1024;
-export const MAX_BODY_CHARS = 250_000;
+export const MAX_BODY_BYTES = 120_000;
 export const MAX_DEVICES = 3;
 export const DEVICE_WINDOW_DAYS = 30;
 export const LICENSE_CACHE_SECONDS = 600;
+export const CALLS_PER_REPLY = 3;
+export const LOOKUPS_PER_10_MIN = 20;
+export const TRIAL_DAILY_USD = 3;
+export const TRIALS_PER_NETWORK_DAY = 3;
+export const STALE_LICENSE_SECONDS = 7_200;
+export const INVALID_CACHE_SECONDS = 120;
+export const PROVIDER_CHECKS_PER_MIN = 60;
+export const TRIALS_WIDE_FACTOR = 8;
+export const MAX_IN_FLIGHT = 2;
+export const IN_FLIGHT_SECONDS = 120;
+export const DAILY_BUDGET_USD = 25;
+export const TOOL_ID_SECONDS = 900;
 
 export function tiers(env) {
   try {
@@ -38,7 +54,19 @@ export function priceFor(model) {
 
 export function costUsd(model, u) {
   const p = priceFor(model);
-  return ((u.input_tokens || 0) * p.in + (u.output_tokens || 0) * p.out +
+  const input = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+  const mult = p.longContext && input > LONG_CONTEXT_TOKENS ? LONG_CONTEXT_MULT : 1;
+  return mult * ((u.input_tokens || 0) * p.in + (u.output_tokens || 0) * p.out +
     (u.cache_read_input_tokens || 0) * p.cacheRead + (u.cache_creation_input_tokens || 0) * p.cacheWrite) / 1e6 +
     (u.web_search_requests || 0) * WEB_SEARCH_USD;
+}
+
+export function worstCaseUsd(model, bodyBytes, maxTokens, webUses) {
+  const passes = webUses + 1;
+  const input = passes * (bodyBytes + TOOL_PROMPT_TOKENS) + WEB_RESULT_TOKENS * (webUses * (webUses + 1)) / 2;
+  return costUsd(model, {
+    cache_creation_input_tokens: input,
+    output_tokens: maxTokens,
+    web_search_requests: webUses,
+  });
 }

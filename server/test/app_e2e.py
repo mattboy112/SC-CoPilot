@@ -71,7 +71,7 @@ def main():
         "ANTHROPIC_API_KEY=sk-test", "ANTHROPIC_URL=http://127.0.0.1:8788", "POLAR_API_URL=http://127.0.0.1:8788",
         "POLAR_ORG_ID=org", 'TIER_MAP={"ben-pilot":"pilot","ben-captain":"captain"}',
         'TIERS_JSON={"pilot":{"replies":3,"web":1,"perMinute":50},"captain":{"perMinute":50}}',
-        "MANAGE_URL=https://example.com/portal",
+        "MANAGE_URL=https://example.com/portal", "KEY_PEPPER=test-pepper",
     ]))
     env = dict(os.environ, NO_PROXY="127.0.0.1,localhost", WRANGLER_SEND_METRICS="false")
     subprocess.run(["npx", "wrangler", "d1", "execute", "sc-copilot", "--local", "--persist-to", state, "--file=schema.sql"],
@@ -110,6 +110,9 @@ def main():
         check("standard model, thinking off", body["model"] == "claude-haiku-5-5" and body.get("thinking") == {"type": "disabled"})
         check("instructions are cached", body["system"][0].get("cache_control") == {"type": "ephemeral"})
         check("conversation end is cached", body["messages"][-1]["content"][-1].get("cache_control") == {"type": "ephemeral"})
+        sent = [t.get("name") for t in b._tools()]
+        got = [t.get("name") for t in body.get("tools", [])]
+        check(f"all {len(sent)} of the app's tools get through the safety filter", got == sent and len(sent) > 5)
         time.sleep(0.4)
         acct = b.account()
         line = BR.format_account(acct)

@@ -17,6 +17,8 @@ import urllib.request
 import wave
 from pathlib import Path
 
+import sc_paths as P
+
 try:
     import sc_fx as FX
 except Exception:
@@ -110,6 +112,8 @@ def edge_voice_list(cache_file, refresh=False):
 class Kokoro:
     FILES = {"kokoro-v1.0.onnx": ("https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx", 300_000_000),
              "voices-v1.0.bin": ("https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin", 25_000_000)}
+    SHA256 = {"kokoro-v1.0.onnx": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+              "voices-v1.0.bin": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"}
 
     def __init__(self, folder):
         self.folder = Path(folder)
@@ -184,12 +188,14 @@ class Kokoro:
                     continue
                 part = dest.with_suffix(dest.suffix + ".part")
                 req = urllib.request.Request(url, headers={"User-Agent": "SC-CoPilot"})
+                h = hashlib.sha256()
                 with urllib.request.urlopen(req, timeout=30) as r, open(part, "wb") as f:
                     got = 0
                     while True:
                         chunk = r.read(1 << 20)
                         if not chunk:
                             break
+                        h.update(chunk)
                         f.write(chunk)
                         got += len(chunk)
                         self.progress = min(0.999, (done_before + got) / total)
@@ -197,6 +203,12 @@ class Kokoro:
                             on_progress(self.progress)
                 if part.stat().st_size < approx * 0.9:
                     raise RuntimeError(f"{name} download looks incomplete")
+                if h.hexdigest() != self.SHA256[name]:
+                    try:
+                        part.unlink()
+                    except OSError:
+                        pass
+                    raise RuntimeError(f"{name} didn't match its known checksum, so it wasn't used")
                 os.replace(part, dest)
                 done_before += approx
             self.progress = 1.0
@@ -892,7 +904,7 @@ class Speaker(threading.Thread):
             return True
         enc = base64.b64encode(SAPI_SCRIPT.encode("utf-16-le")).decode()
         try:
-            self.sapi = subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", enc],
+            self.sapi = subprocess.Popen([P.system_exe(*P.POWERSHELL), "-NoProfile", "-NonInteractive", "-EncodedCommand", enc],
                                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                          creationflags=NO_WINDOW, text=True, encoding="utf-8", bufsize=1)
         except Exception:

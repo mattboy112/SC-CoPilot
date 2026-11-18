@@ -215,7 +215,7 @@ else:
 
 def powershell(script):
     enc = base64.b64encode(script.encode("utf-16-le")).decode()
-    subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], check=True,
+    subprocess.run([P.system_exe(*P.POWERSHELL), "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], check=True,
                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), capture_output=True, timeout=60)
 
 

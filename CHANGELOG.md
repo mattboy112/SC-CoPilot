@@ -23,6 +23,8 @@ First public release.
 - Quantum fixed for Star Citizen 4.10: "quantum mode" switches to NAV, "engage quantum" switches to NAV if needed and holds the engage button, and it tells you when no destination is set.
 - AI avatar on the overlay: a glowing core in a cloud of points that reacts when you talk, while it thinks, and to the loudness of its voice.
 - Two new voice effects, Deep and dark and Echo chamber, plus a Pitch slider that makes any voice deeper or lighter.
+- Security: your API key and subscription key are saved encrypted, locked to your Windows account. Updates only install if the file exactly matches the one published on GitHub. Line packs can only change lines, never settings. Pasted keys are cleaned of stray spaces and line breaks, and an Anthropic key pasted into the subscription box is caught instead of sent.
+- Security (subscription service): requests are rebuilt from scratch so only what the app sends gets through, every request reserves its worst-case cost first, two questions in flight per key at most, usage is counted even if a request is cut off, one free trial per PC, daily spending brakes, throttled key guessing and floods, and no raw keys, PC IDs, full emails or request logs stored.
 - New logo, shown on the taskbar, window, desktop shortcut, installer and website.
 - First-run setup, automatic updates, Copy diagnostics for bug reports.
-- 169 automated tests run on every build.
+- 324 automated app tests and 48 service checks, including attack attempts, run on every change.

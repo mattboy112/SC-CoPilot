@@ -44,6 +44,16 @@ def resource(name):
     return APP_DIR / name
 
 
+def system_exe(*parts):
+    """Full path to a Windows program, so a same-named file in the app's or current folder can't be run instead."""
+    root = os.environ.get("SystemRoot") or r"C:\Windows"
+    full = Path(root, "System32", *parts)
+    return str(full) if full.exists() else parts[-1]
+
+
+POWERSHELL = ("WindowsPowerShell", "v1.0", "powershell.exe")
+
+
 def cache(name):
     return CACHE_DIR / name
 

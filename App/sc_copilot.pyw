@@ -48,6 +48,7 @@ import sc_update as UPD
 import sc_version as VER
 import sc_overlay as OV
 import sc_quick as Q
+import sc_secret as SEC
 import sc_trade as T
 import sc_voice as V
 
@@ -120,6 +121,10 @@ def load_settings():
             s["callouts"].update(v)
         else:
             s[k] = v
+    lost = SEC.unlock_settings(s)
+    if lost:
+        s["_keys_lost"] = lost
+        print(f"[settings] saved {', '.join(lost)} was locked to another PC or Windows account; it needs re-entering", flush=True)
     return s
 
 
@@ -130,7 +135,7 @@ def save_settings(s):
     with _SAVE_LOCK:
         tmp = SETTINGS_FILE.with_name(f"sc_settings.{threading.get_ident()}.tmp")
         try:
-            data = json.dumps({k: v for k, v in dict(s).items() if not k.startswith("_")}, indent=2)
+            data = json.dumps(SEC.lock_settings({k: v for k, v in dict(s).items() if not k.startswith("_")}), indent=2)
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(data)
             os.replace(tmp, SETTINGS_FILE)
@@ -408,6 +413,8 @@ class App:
             threading.Thread(target=self.refresh_edge_voices, args=(False,), daemon=True).start()
         if self.first_run:
             self.root.after(700, self.open_wizard)
+        if self.settings.pop("_keys_lost", None):
+            self.root.after(1500, lambda: self.toast("Your saved AI key was locked to another PC or Windows account. Paste it again in Settings."))
         self.root.after(9000, self.auto_update_check)
         for i, msg in enumerate(self.migrations):
             self.root.after(2000 + 3800 * i, lambda m=msg: self.toast(m))
@@ -1807,6 +1814,10 @@ class App:
         def go():
             try:
                 path = UPD.download(info)
+            except UPD.UpdateRefused as ex:
+                self.ui(("toast", f"{ex} Opening the download page instead."))
+                webbrowser.open(info["url"])
+                return
             except Exception as ex:
                 self.ui(("toast", f"Download failed ({type(ex).__name__}). Opening the download page instead."))
                 webbrowser.open(info["url"])
@@ -1846,7 +1857,12 @@ class App:
 
     def test_api(self):
         if self.key_entry is not None:
-            self.set_and_save("license_key" if self.brain.mode() == "service" else "api_key", self.key_entry.get().strip())
+            value = BR.clean_key(self.key_entry.get())
+            service = self.brain.mode() == "service"
+            if service and BR.is_anthropic_key(value):
+                self.toast("That's an Anthropic API key, not a Co-Pilot license key. Pick \"My own Anthropic API key\" above to use it.")
+                return
+            self.set_and_save("license_key" if service else "api_key", value)
 
         def go():
             try:
@@ -2055,7 +2071,7 @@ class App:
         import urllib.request
         req = urllib.request.Request(url, headers={"User-Agent": f"SC-CoPilot/{VER.VERSION}", "Cache-Control": "no-cache"})
         with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read().decode("utf-8"))
+            return json.loads(r.read(2_000_000).decode("utf-8"))
 
     def open_pack_gallery(self):
         w = getattr(self, "pack_win", None)
@@ -2086,7 +2102,7 @@ class App:
         def fetch():
             try:
                 data = self._fetch_json(VER.PACKS_INDEX_URL)
-                packs = data.get("packs") or []
+                packs = [e for e in (data.get("packs") or []) if isinstance(e, dict) and LN.safe_pack_path(e.get("file"))]
                 err = None
             except Exception as ex:
                 packs, err = [], f"{type(ex).__name__}"
@@ -3019,8 +3035,15 @@ def main():
         sys.exit(selftest())
     if "--nvfix" in sys.argv:
         out = sys.argv[sys.argv.index("--nvfix") + 1] if len(sys.argv) > sys.argv.index("--nvfix") + 1 else str(P.cache("sc_nvfix_result.json"))
+        if Path(out).name != "sc_nvfix_result.json":
+            return
         result = NV.fix()
-        Path(out).write_text(json.dumps({"result": result, "after": NV.check()}), encoding="utf-8")
+        try:
+            fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+        except OSError:
+            return
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"result": result, "after": NV.check()}))
         return
     relaunched = "--relaunch" in sys.argv
     if not relaunched and load_settings().get("run_as_admin") and sys.platform == "win32" and not B.self_elevated():

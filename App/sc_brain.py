@@ -190,6 +190,15 @@ class ApiError(RuntimeError):
         self.raw_msg = raw_msg
 
 
+def clean_key(value):
+    """The key with every space and line break removed, since a pasted key often wraps or picks up a stray newline."""
+    return "".join(str(value or "").split())
+
+
+def is_anthropic_key(value):
+    return str(value or "").lower().startswith("sk-ant-")
+
+
 def device_id():
     """A stable, anonymous id for this PC, so one subscription can't be shared across many machines."""
     import getpass
@@ -297,12 +306,13 @@ class Brain:
         m = self.app.settings.get("ai_mode") or "own_key"
         return m if m in dict(AI_MODES) else "own_key"
 
-    def key(self):
-        m = self.mode()
+    def key(self, m=None):
+        m = m or self.mode()
         if m == "own_key":
-            return (self.app.settings.get("api_key") or "").strip()
+            return clean_key(self.app.settings.get("api_key"))
         if m == "service" and VER.SERVICE_URL:
-            return (self.app.settings.get("license_key") or "").strip()
+            k = clean_key(self.app.settings.get("license_key"))
+            return "" if is_anthropic_key(k) else k
         return ""
 
     def ready(self):
@@ -315,16 +325,20 @@ class Brain:
         if m == "service":
             if not VER.SERVICE_URL:
                 return "The Co-Pilot subscription isn't open yet. Use your own API key in Settings for now."
+            if is_anthropic_key(clean_key(self.app.settings.get("license_key"))):
+                return ("That's an Anthropic API key, not a Co-Pilot license key. In Settings, pick \"My own Anthropic API key\" "
+                        "to use it, or paste your Co-Pilot license key instead.")
             return "Enter your Co-Pilot subscription key in Settings."
         return "No API key yet. Paste one in Settings."
 
-    def _target(self):
-        if self.mode() == "service":
+    def _target(self, m=None):
+        m = m or self.mode()
+        if m == "service":
             u = urllib.parse.urlsplit(VER.SERVICE_URL)
             path = (u.path or "").rstrip("/") + API_PATH
-            return u.hostname, u.port or 443, path, {"authorization": f"Bearer {self.key()}", "x-copilot-version": VER.VERSION,
+            return u.hostname, u.port or 443, path, {"authorization": f"Bearer {self.key(m)}", "x-copilot-version": VER.VERSION,
                                                      "x-copilot-device": device_id()}
-        return API_HOST, 443, API_PATH, {"x-api-key": self.key()}
+        return API_HOST, 443, API_PATH, {"x-api-key": self.key(m)}
 
     def warm(self):
         if not self.key() or not self.conn.lock.acquire(blocking=False):
@@ -341,10 +355,11 @@ class Brain:
     def _request(self, body, on_text=None):
         data = json.dumps(body).encode("utf-8")
         stream = bool(body.get("stream"))
-        host, port, path, auth = self._target()
+        mode = self.mode()
+        host, port, path, auth = self._target(mode)
         headers = dict(auth, **{"anthropic-version": API_VERSION, "content-type": "application/json",
                                 "user-agent": UA, "accept": "text/event-stream" if stream else "application/json"})
-        service = self.mode() == "service"
+        service = mode == "service"
         with self.conn.lock:
             resp = None
             for attempt in range(2):
@@ -353,6 +368,9 @@ class Brain:
                     c.request("POST", path, body=data, headers=headers)
                     resp = c.getresponse()
                     break
+                except ValueError:
+                    self.conn.reset()
+                    raise RuntimeError("Your saved key has characters that can't be sent. Paste it again in Settings.") from None
                 except (http.client.HTTPException, OSError) as ex:
                     self.conn.reset()
                     if attempt:
@@ -463,6 +481,8 @@ class Brain:
         return {"content": content, "stop_reason": stop, "usage": usage}
 
     def test(self):
+        if not self.ready():
+            raise RuntimeError(self.not_ready_reason())
         body = {"model": self.app.settings.get("model", MODELS[0][0]), "max_tokens": 64,
                 "messages": [{"role": "user", "content": "Reply with exactly: Co-pilot online."}]}
         try:
@@ -489,9 +509,9 @@ class Brain:
 
     def account(self):
         """The subscription's plan and usage from the Co-Pilot service, or None when not using it."""
-        if self.mode() != "service" or not self.key():
+        if self.mode() != "service" or not self.key("service"):
             return None
-        host, port, path, auth = self._target()
+        host, port, path, auth = self._target("service")
         base = path[: -len(API_PATH)] if path.endswith(API_PATH) else ""
         c = http.client.HTTPSConnection(host, port, timeout=15, context=ssl.create_default_context())
         try:

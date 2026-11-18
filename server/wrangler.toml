@@ -9,6 +9,27 @@ LS_STORE_ID = ""
 TIER_MAP = "{}"
 MANAGE_URL = ""
 UPGRADE_URL = ""
+DAILY_BUDGET_USD = "25"
+TRIAL_DAILY_USD = "3"
+
+[triggers]
+crons = ["23 * * * *"]
+
+[[ratelimits]]
+name = "NEW_KEYS"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "PER_IP"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }
+
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = false
 
 [[d1_databases]]
 binding = "DB"

@@ -27,6 +27,10 @@ def slugify(name):
     return s[:40] or "pack"
 
 
+LINKISH = re.compile(r"https?://|(?<![\w:])//\w|www\.|discord\.gg|@\w|"
+                     r"\b[a-z0-9-]{2,}\.(?:com|net|org|gg|io|co|xyz|ru|me|tv|ly|link|app|dev|shop|site|live|info|biz)\b", re.I)
+
+
 def validate(pack):
     """List of problems; empty means the pack is fine."""
     errs = []
@@ -39,6 +43,9 @@ def validate(pack):
         errs.append("The name must be 3 to 40 characters.")
     if len(str(pack.get("description", ""))) > 160:
         errs.append("The description must be 160 characters or less.")
+    for field in ("name", "description"):
+        if LINKISH.search(str(pack.get(field, ""))):
+            errs.append(f"The {field} can't have links or @mentions.")
     if pack.get("personality", "standard") not in LN.PERSONALITIES:
         errs.append(f"Unknown base personality: {pack.get('personality')!r}.")
     lines = pack.get("lines")
@@ -53,7 +60,7 @@ def validate(pack):
         text = str(text)
         if len(text) > MAX_LINE:
             errs.append(f"{key}: longer than {MAX_LINE} characters.")
-        if re.search(r"https?://|www\.|\.com\b|discord\.gg", text, re.I):
+        if LINKISH.search(text):
             errs.append(f"{key}: no links please.")
         used = set(re.findall(r"\{(\w+)\}", text))
         allowed = PLACEHOLDERS.get(key, set())
