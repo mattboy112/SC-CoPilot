@@ -15,6 +15,7 @@ First public release.
 - Personalities: six original co-pilot characters, plus a line editor to rewrite any callout or reply, with random variants and shareable line packs.
 - Target reader (beta): reads your target's shield and hull off the HUD from boxes you draw once, answers "target status" / "are his shields down?", and can call out when shields drop.
 - Community line-pack gallery: browse, preview and install packs in the app; share yours through a GitHub form.
+- Ask what ships you can buy: by system, type (fighter, heavy fighter, cargo, mining...), dealer or budget, with the dealer and price. "Ship dealers in Stanton" works too.
 - The AI stays in character as your ship's AI: answers first, in a sentence or two, with no disclaimers or talk about where it got the information.
 - Knows the ship's state (gear, NAV/SCM, power, lights, doors and more) from its own commands and your own key presses, so it doesn't undo things by repeating them. Forgets when you change ships.
 - Quantum fixed for Star Citizen 4.10: "quantum mode" switches to NAV, "engage quantum" switches to NAV if needed and holds the engage button, and it tells you when no destination is set.

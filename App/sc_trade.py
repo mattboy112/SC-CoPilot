@@ -222,6 +222,49 @@ PLACE_KEEP = ("id", "name", "nickname", "code", "star_system_name", "planet_name
               "is_lagrange", "is_jump_point") + tuple(sorted(set(SERVICES.values())))
 VEH_KEEP = ("id", "name", "name_full", "company_name", "scu", "crew", "mass", "length", "width", "height", "pad_type",
             "fuel_quantum", "fuel_hydrogen", "is_concept", "game_version")
+SHIP_DEALER_WORDS = ("ship dealer", "ship dealers", "ship shop", "ship shops", "shipyard", "shipyards", "ships", "ship",
+                     "vehicle dealer", "vehicle dealers", "vehicles", "dealer", "dealers", "ship store", "ship sales")
+DEALER_HINTS = {"astro armada": "Area 18", "new deal crusader": "Orison", "crusader showroom": "Orison"}
+COMBAT_WORDS = ("fight", "combat", "military", "dogfight", "interceptor", "gunship", "bomber", "attack", "pvp", "bounty")
+KIND_ROLES = {"cargo": "cargo", "haul": "cargo", "freight": "cargo", "trade": "cargo", "mining": "mining", "miner": "mining",
+              "salvage": "salvage", "medical": "medical", "med": "medical", "explor": "exploration", "racing": "racing",
+              "racer": "racing", "ground": "ground_vehicle", "buggy": "ground_vehicle", "tank": "ground_vehicle",
+              "bike": "ground_vehicle", "starter": "starter", "beginner": "starter", "refuel": "refuel", "repair": "repair",
+              "passenger": "passenger", "stealth": "stealth", "data": "datarunner", "science": "science", "scan": "scanning",
+              "interdict": "interdiction", "emp": "emp", "boarding": "boarding", "construction": "construction"}
+
+
+NOT_FIGHTER_ROLES = {"cargo", "carrier", "industrial", "refinery", "medical", "boarding", "scanning", "ground_vehicle"}
+
+
+def is_fighter(v, kind=""):
+    """Small, armed, next to no cargo. UEX's crew number is the minimum crew, so size and cargo do the work.
+    light/medium/heavy in `kind` narrow it by length (ships with no length on file stay in)."""
+    roles = set(v.get("roles") or [])
+    if roles & NOT_FIGHTER_ROLES or ("bomber" in roles and "bomber" not in kind):
+        return False
+    if "module" in str(v.get("name_full") or "").lower() or str(v.get("pad_type") or "").upper() in ("L", "XL"):
+        return False
+    try:
+        length, scu = float(v.get("length") or 0), float(v.get("scu") or 0)
+    except ValueError:
+        length, scu = 0.0, 0.0
+    if scu > 8 or length > 50:
+        return False
+    if "light" in kind:
+        return 0 < length <= 22
+    if "medium" in kind:
+        return 22 < length <= 30
+    if "heavy" in kind:
+        return length == 0 or length > 26
+    return True
+
+
+def max_crew(crew):
+    nums = [int(n) for n in re.findall(r"\d+", str(crew or ""))]
+    return max(nums) if nums else 0
+
+
 VEH_ROLES = ("is_boarding", "is_bomber", "is_cargo", "is_carrier", "is_civilian", "is_construction", "is_datarunner", "is_emp",
              "is_exploration", "is_ground_vehicle", "is_industrial", "is_interdiction", "is_medical", "is_military", "is_mining",
              "is_passenger", "is_qed", "is_racing", "is_refinery", "is_refuel", "is_repair", "is_salvage", "is_scanning",
@@ -282,17 +325,106 @@ class UexExtra:
 
     @staticmethod
     def _place_text(p):
-        loc = ", ".join(x for x in (p.get("moon_name") or p.get("orbit_name"), p.get("planet_name"), p.get("star_system_name")) if x)
+        parts = []
+        for x in (p.get("moon_name") or p.get("orbit_name"), p.get("planet_name"), p.get("star_system_name")):
+            if x and x not in parts and x != p.get("name"):
+                parts.append(x)
+        loc = ", ".join(parts)
         return f"{p['name']}" + (f" ({loc})" if loc else "")
 
     @staticmethod
     def _flags(p):
         return [k[4:].replace("_", " ") for k in sorted(set(SERVICES.values())) if str(p.get(k, 0)) == "1"]
 
+    def dealers(self):
+        """Every ship dealer seen in the price data, with where it is (UEX's price rows only carry the shop name)."""
+        vb = self._cached("vbuy", lambda: self.uex._get("vehicles_purchases_prices_all"))
+        places = self.places()
+        out = {}
+        for name in sorted({r.get("terminal_name") for r in vb if r.get("terminal_name")}):
+            tn = norm(name)
+            hint = norm(next((v for k, v in DEALER_HINTS.items() if k in tn), ""))
+            best = None
+            for p in places:
+                for key in ("name", "nickname", "city_name"):
+                    c = norm(p.get(key))
+                    if len(c) > 3 and ((hint and c.replace(" ", "") == hint.replace(" ", "")) or re.search(rf"\b{re.escape(c)}\b", tn)):
+                        if best is None or len(c) > best[0] or (len(c) == best[0] and p["kind"] == "city"):
+                            best = (len(c), p)
+            if best:
+                p = best[1]
+                out[name] = {"place": self._place_text(p), "system": p.get("star_system_name") or ""}
+                continue
+            for p in places:
+                pl = norm(p.get("planet_name"))
+                if len(pl) > 3 and re.search(rf"\b{re.escape(pl)}\b", tn):
+                    out[name] = {"place": f"{p['planet_name']}, {p.get('star_system_name')}", "system": p.get("star_system_name") or ""}
+                    break
+            else:
+                out[name] = {"place": "", "system": ""}
+        return out
+
+    def ships_for_sale(self, system=None, kind="", dealer="", max_price=None, limit=50):
+        """Ships you can buy in game, narrowed by star system, type (fighter, cargo, mining...) or name, cheapest first."""
+        vb = self._cached("vbuy", lambda: self.uex._get("vehicles_purchases_prices_all"))
+        vehicles = {v.get("id"): v for v in self.vehicles()}
+        dealers = self.dealers()
+        k, dn = norm(kind), norm(dealer)
+        combat = any(w in k for w in COMBAT_WORDS)
+        role = next((r for w, r in KIND_ROLES.items() if w in k), None) if not combat else None
+        ships = {}
+        for r in vb:
+            price = float(r.get("price_buy") or 0)
+            v = vehicles.get(r.get("id_vehicle"))
+            d = dealers.get(r.get("terminal_name"), {"place": "", "system": ""})
+            if price <= 0 or not v:
+                continue
+            if system and d["system"].lower() != system.lower():
+                continue
+            if dn and dn not in norm(f"{r.get('terminal_name')} {d['place']}"):
+                continue
+            if max_price and price > float(max_price):
+                continue
+            roles = v.get("roles") or []
+            if combat:
+                if "ground_vehicle" in roles or not ({"military", "bomber"} & set(roles)):
+                    continue
+                if "bomber" in k and "bomber" not in roles:
+                    continue
+                if any(w in k for w in ("fight", "interceptor", "dogfight")) and not is_fighter(v, k):
+                    continue
+            elif role:
+                if role not in roles:
+                    continue
+            elif k and k not in norm(f"{v.get('name_full')} {v.get('company_name')}"):
+                continue
+            s = ships.setdefault(v["id"], {"ship": v.get("name_full") or v.get("name"), "crew": v.get("crew"),
+                                           "pad": v.get("pad_type"), "shops": []})
+            if v.get("scu"):
+                s["cargo_scu"] = v.get("scu")
+            s["shops"].append((round(price), r.get("terminal_name")))
+        out = []
+        for s in ships.values():
+            s["shops"].sort()
+            s["price"] = s["shops"][0][0]
+            s["at"] = [f"{w} {p:,}" for p, w in s.pop("shops")[:3]]
+            out.append(s)
+        out.sort(key=lambda s: s["price"], reverse="heavy" in k)
+        here = {n: d["place"] for n, d in dealers.items() if not system or d["system"].lower() == system.lower()}
+        return {"system": system or "all", "kind": kind or "any", "count": len(out), "ships": out[:limit],
+                "dealers": here,
+                "note": "Only lists ships sold in game for aUEC. Roles are broad; use your own knowledge of each ship's class "
+                        "(light, medium or heavy fighter, bomber and so on) to pick from this list."}
+
     def find_services(self, service, system=None, near="", limit=12):
+        if norm(service) in SHIP_DEALER_WORDS:
+            here = [{"dealer": n, "where": d["place"], "system": d["system"]} for n, d in self.dealers().items()
+                    if not system or d["system"].lower() == system.lower()]
+            return {"service": "ship dealer", "system_filter": system or "all", "count": len(here), "results": here,
+                    "tip": "Use ships_for_sale to see which ships each dealer sells and the prices."}
         key = SERVICES.get(norm(service).replace(" ", "_")) or SERVICES.get(norm(service).split(" ")[0])
         if not key:
-            return {"error": f"Don't know the service '{service}'. Try: refuel, repair, refinery, clinic, shops, food, habitation, cargo, trade."}
+            return {"error": f"Don't know the service '{service}'. Try: refuel, repair, refinery, clinic, shops, food, habitation, cargo, trade, ship dealer."}
         rows = [p for p in self.places() if str(p.get(key, 0)) == "1"]
         if system:
             rows = [p for p in rows if (p.get("star_system_name") or "").lower() == system.lower()]

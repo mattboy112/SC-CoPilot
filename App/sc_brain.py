@@ -30,7 +30,9 @@ How you talk:
 - Never mention the internet, web searches, sources, websites, UEX, community data, your training, being an AI model, patches or game updates. No disclaimers, no "double-check", "verify", "as of", "may have changed", "I found", "according to". No hedging.
 - If you don't know or have no reading, say so in a few words ("No reading on that.") and stop.
 - Plain spoken English. No markdown, lists, symbols, emoji, URLs or citations. Say numbers the way a person would: "about 26 thousand aUEC", "three kills", "twenty minutes ago".
-- Calm and sharp, with a bit of dry wit when it fits. No filler, no "great question", no offers of more help.
+- Calm and sharp, with a bit of dry wit when it fits. No filler, no "great question", no offers of more help. Don't call them "pilot" in every reply.
+- Only answer what was asked. Don't add unrelated status.
+- Never talk about your tools, filters, databanks or what you can't search. If one lookup comes up empty, try another, then answer with what you found.
 
 How you work:
 - The [Live status] block in each message is the current state read from Game.log. Answer straight from it whenever it has what you need, because every tool call adds a pause. Use a tool only when you need more: contracts, combat log, purchases, history, keybinds.
@@ -38,10 +40,10 @@ How you work:
 - The log does NOT show shield, hull, fuel or ammo levels, the wallet balance, mission rewards, exact position, or the names of most other players. If asked, say you've got no reading on that, rather than guessing.
 - Never make up game data.
 - Only press controls when the pilot asks for that action in their current message. After pressing, confirm in a few words ("Gear down."). If a control has no key, say so and that it can be auto-assigned on the Controls tab.
-- The pilot talks naturally and won't use the same words twice. Speech-to-text also mishears things ("Vallance" is "balance", "sheilds" is "shields", "flairs" is "flares"). Work out what they meant and act on it right away. Don't ask for confirmation unless two different actions are genuinely equally likely; a wrong guess on a harmless control is better than making them repeat themselves in a fight.
+- The pilot talks naturally and won't use the same words twice. Speech-to-text also mishears things ("Vallance" is "balance", "sheilds" is "shields", "flairs" is "flares", "woke" is "what"). If a word makes no sense, it's a mishearing: answer the obvious question and never repeat the odd word back. Work out what they meant and act on it right away. Don't ask for confirmation unless two different actions are genuinely equally likely; a wrong guess on a harmless control is better than making them repeat themselves in a fight.
 - Star Citizen has no "highest threat" key. For "highest threat", "biggest threat", "who's shooting me" or similar, press target_attacker (it cycles through ships attacking the pilot); if nothing is attacking, target_hostile.
 - You never self-destruct, eject, fire weapons, fly or fight for the pilot.
-- Be specific. Give real names, numbers and places from your tools rather than general advice. Use the tools freely for game facts: find_services (where to refuel, repair, refine, heal, shop, eat, sleep), place_info (what a station/city/outpost has, armistice, pads, jurisdiction), ship_info (specs, roles, cargo, crew, and where to buy or rent it in game for aUEC), item_where (where to buy a weapon, component or armor and the price), refinery_yields (best refinery for an ore).
+- Be specific. Give real names, numbers and places from your tools rather than general advice. Use the tools freely for game facts: find_services (where to refuel, repair, refine, heal, shop, eat, sleep), place_info (what a station/city/outpost has, armistice, pads, jurisdiction), ship_info (specs, roles, cargo, crew, and where to buy or rent it in game for aUEC), item_where (where to buy a weapon, component or armor and the price), ships_for_sale (which ships you can buy, by system, type or dealer, and the prices), refinery_yields (best refinery for an ore). For a list question ("what fighters can I buy in Stanton"), name the best few with their dealer and price; you know each ship's class (light, medium, heavy fighter, bomber) even when the list doesn't say.
 - For commodity prices, where to sell or buy something, and trade routes, use commodity_prices and trade_route instead of guessing or web searching. Prices are per SCU. When they say "near me" or "here", pass the star system from the live status.
 - Macros are the pilot's saved key sequences. Run one with run_macro when they ask for it by name.
 - For Star Citizen knowledge (ships, loadouts, components, mining, salvage, trade, locations, mechanics), answer from what you know. If web_search is available and you need current details, search once and just give the answer.
@@ -82,12 +84,14 @@ SYS_ENUM = {"type": "string", "enum": ["Stanton", "Pyro", "Nyx", "all"]}
 INFO_TOOLS = [
     {"name": "get_target_status", "description": "Read the locked target's shield and hull level off the pilot's HUD (screen reading the pilot set up). Returns rough percentages, or says it isn't set up or can't see a target.",
      "input_schema": {"type": "object", "properties": {}}},
-    {"name": "find_services", "description": "Find stations, cities and outposts that have a service: refuel, repair, refinery, clinic, shops, food, habitation, cargo, trade. Optional star system and a 'near' place or planet name to sort closer matches first.",
+    {"name": "find_services", "description": "Find stations, cities and outposts that have a service: refuel, repair, refinery, clinic, shops, food, habitation, cargo, trade, ship dealer. Optional star system and a 'near' place or planet name to sort closer matches first.",
      "input_schema": {"type": "object", "properties": {"service": {"type": "string"}, "system": SYS_ENUM, "near": {"type": "string"}}, "required": ["service"]}},
     {"name": "place_info", "description": "Details for a named station, city or outpost: what services it has, armistice, monitored, landing pad sizes, jurisdiction, faction.",
      "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
     {"name": "ship_info", "description": "A ship or vehicle's specs (maker, cargo SCU, crew, pad size, roles, dimensions, quantum fuel) plus where to buy it or rent it in game and the aUEC price.",
      "input_schema": {"type": "object", "properties": {"ship": {"type": "string"}}, "required": ["ship"]}},
+    {"name": "ships_for_sale", "description": "Ships and vehicles you can buy in game for aUEC, cheapest first, with which dealer sells each one and where that dealer is. Filter by star system, kind (fighter, heavy fighter, bomber, gunship, cargo, mining, salvage, medical, exploration, racing, ground vehicle, starter...), dealer name and max price. Use for 'what fighters can I buy', 'where can I buy ships', 'cheapest cargo ship in Stanton'.",
+     "input_schema": {"type": "object", "properties": {"system": SYS_ENUM, "kind": {"type": "string"}, "dealer": {"type": "string"}, "max_price": {"type": "number"}}}},
     {"name": "item_where", "description": "Where to buy an item in game (ship weapons, shields, power plants, coolers, quantum drives, missiles, FPS weapons, armor, tools) and the price at each shop.",
      "input_schema": {"type": "object", "properties": {"item": {"type": "string"}}, "required": ["item"]}},
     {"name": "refinery_yields", "description": "Refinery yield bonuses: the best refineries for a given ore, or each refinery's top bonuses if no commodity is given.",
@@ -606,7 +610,7 @@ class Brain:
         if name == "get_target_status":
             r = self.app.hud.read()
             return json.dumps({k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items()})
-        if name in ("find_services", "place_info", "ship_info", "item_where", "refinery_yields"):
+        if name in ("find_services", "place_info", "ship_info", "item_where", "refinery_yields", "ships_for_sale"):
             x = self.app.uex_extra
             sysname = inp.get("system")
             sysname = None if not sysname or sysname == "all" else sysname
@@ -619,6 +623,8 @@ class Brain:
                     out = x.ship(inp.get("ship", ""))
                 elif name == "item_where":
                     out = x.item(inp.get("item", ""))
+                elif name == "ships_for_sale":
+                    out = x.ships_for_sale(sysname, inp.get("kind") or "", inp.get("dealer") or "", inp.get("max_price") or None, limit=30)
                 else:
                     out = x.yields(inp.get("commodity") or None, sysname)
             except Exception as ex:
