@@ -19,3 +19,6 @@ App/sc_nvfix_result.json
 App/models/
 App/sc_binds_test_copy.py
 App/.icons/
+server/node_modules/
+server/.dev.vars
+server/.wrangler/

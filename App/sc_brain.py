@@ -13,6 +13,8 @@ import sc_version as VER
 from sc_binds import ACTION_INDEX, ACTIONS
 from sc_log import ago, clean_item, clean_place, hm
 
+STANDARD_MODEL = "claude-haiku-5-5"
+SMART_MODEL = "claude-sonnet-5-5"
 API_HOST = "api.anthropic.com"
 API_PATH = "/v1/messages"
 API_VERSION = "2023-06-01"
@@ -65,7 +67,7 @@ TOOLS = [
     {"name": "press_controls", "description": "Press the pilot's own Star Citizen keybinds, in order. Only when they ask. Actions: " + ", ".join(f"{a[0]} ({a[1]})" for a in ACTIONS),
      "input_schema": {"type": "object", "properties": {"actions": {"type": "array", "items": {"type": "object", "properties": {
          "action": {"type": "string", "enum": [a[0] for a in ACTIONS]}, "times": {"type": "integer", "minimum": 1, "maximum": 6}},
-         "required": ["action"]}, "maxItems": 8}}, "required": ["actions"]}, "cache_control": {"type": "ephemeral"}},
+         "required": ["action"]}, "maxItems": 8}}, "required": ["actions"]}},
 ]
 
 
@@ -188,6 +190,81 @@ class ApiError(RuntimeError):
         self.raw_msg = raw_msg
 
 
+def device_id():
+    """A stable, anonymous id for this PC, so one subscription can't be shared across many machines."""
+    import getpass
+    import hashlib
+    import uuid
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = ""
+    return hashlib.sha256(f"sc-copilot|{uuid.getnode()}|{user}".encode()).hexdigest()[:24]
+
+
+def with_cache(msgs):
+    """Copy of msgs with a cache marker on the last block, so the next request (a tool round trip or the
+    next question) re-reads everything up to here at a tenth of the price."""
+    if not msgs:
+        return msgs
+    out = list(msgs)
+    last = dict(out[-1])
+    content = last.get("content")
+    if isinstance(content, str):
+        content = [{"type": "text", "text": content}]
+    if isinstance(content, list) and content and isinstance(content[-1], dict) and content[-1].get("type") != "thinking":
+        content = list(content)
+        content[-1] = dict(content[-1], cache_control={"type": "ephemeral"})
+        last["content"] = content
+    out[-1] = last
+    return out
+
+
+def format_account(d):
+    """One line about a subscription: plan, what's used and when it resets."""
+    if not d:
+        return ""
+    u, lim = d.get("usage") or {}, d.get("limits") or {}
+    parts = [d.get("plan_name") or "Co-Pilot"]
+    if d.get("resets_at"):
+        parts.append(f"{u.get('replies', 0):,} of {lim.get('replies', 0):,} replies this month")
+    else:
+        parts.append(f"{u.get('replies', 0):,} of {lim.get('replies', 0):,} trial replies used")
+    if lim.get("web"):
+        parts.append(f"{u.get('web', 0)} of {lim['web']} web lookups")
+    if lim.get("smart"):
+        parts.append(f"{u.get('smart', 0)} of {lim['smart']} smart replies")
+    if d.get("resets_at"):
+        try:
+            when = datetime.fromisoformat(d["resets_at"].replace("Z", "+00:00"))
+            parts.append(f"resets {when:%b} {when.day}")
+        except ValueError:
+            pass
+    return " · ".join(parts)
+
+
+NOTICES = {"smart-limit": "Smart replies are used up this month, so that answer used the standard model.",
+           "smart-not-in-plan": "Smart replies come with the Captain plan, so that answer used the standard model.",
+           "web-limit": "Web lookups are used up this month, so it answered without searching."}
+
+
+def _service_fail(status, raw):
+    try:
+        err = json.loads(raw.decode("utf-8")).get("error", {})
+    except Exception:
+        err = {}
+    msg = err.get("message", "")
+    if status == 429 and err.get("type") == "quota_exceeded":
+        raise ApiError((msg or "You've used this month's AI replies.") + " Instant commands and callouts still work.", status, msg)
+    if status == 429:
+        raise ApiError(msg or "Too many questions at once. Give it a minute.", status, msg)
+    if status in (401, 402, 403, 413):
+        raise ApiError(msg or "Your Co-Pilot subscription key isn't valid or isn't active. Check Settings.", status, msg)
+    if status in (500, 502, 503, 529):
+        raise ApiError(msg or "The Co-Pilot service is busy. Try again in a moment.", status, msg)
+    raise ApiError(f"Co-Pilot service error {status}: {msg}", status, msg)
+
+
 def _fail(status, raw, reason=""):
     try:
         msg = json.loads(raw.decode("utf-8")).get("error", {}).get("message", "")
@@ -214,6 +291,7 @@ class Brain:
         self.conn = _Conn()
         self.web_ok = True
         self.thinking = "off"
+        self.notices = set()
 
     def mode(self):
         m = self.app.settings.get("ai_mode") or "own_key"
@@ -244,7 +322,8 @@ class Brain:
         if self.mode() == "service":
             u = urllib.parse.urlsplit(VER.SERVICE_URL)
             path = (u.path or "").rstrip("/") + API_PATH
-            return u.hostname, u.port or 443, path, {"authorization": f"Bearer {self.key()}", "x-copilot-version": VER.VERSION}
+            return u.hostname, u.port or 443, path, {"authorization": f"Bearer {self.key()}", "x-copilot-version": VER.VERSION,
+                                                     "x-copilot-device": device_id()}
         return API_HOST, 443, API_PATH, {"x-api-key": self.key()}
 
     def warm(self):
@@ -281,14 +360,13 @@ class Brain:
                         raise RuntimeError(f"Couldn't reach {where} ({type(ex).__name__}). Check your internet.")
             if resp.status != 200:
                 raw = resp.read()
-                if service and resp.status in (401, 402, 403):
-                    try:
-                        msg = json.loads(raw.decode("utf-8")).get("error", {}).get("message", "")
-                    except Exception:
-                        msg = ""
-                    raise ApiError(msg or ("Your Co-Pilot subscription key isn't valid or has run out. Check Settings."
-                                           if resp.status != 402 else "You've used this month's Co-Pilot allowance."), resp.status, msg)
+                if service and not (resp.status == 400 and b"invalid_request_error" in raw):
+                    _service_fail(resp.status, raw)
                 _fail(resp.status, raw, resp.reason)
+            if service:
+                for n in (resp.getheader("x-copilot-notice") or "").split(","):
+                    if n.strip() in NOTICES:
+                        self.notices.add(n.strip())
             try:
                 if not stream:
                     return json.loads(resp.read().decode("utf-8"))
@@ -409,6 +487,28 @@ class Brain:
             finally:
                 self.busy = False
 
+    def account(self):
+        """The subscription's plan and usage from the Co-Pilot service, or None when not using it."""
+        if self.mode() != "service" or not self.key():
+            return None
+        host, port, path, auth = self._target()
+        base = path[: -len(API_PATH)] if path.endswith(API_PATH) else ""
+        c = http.client.HTTPSConnection(host, port, timeout=15, context=ssl.create_default_context())
+        try:
+            c.request("GET", base + "/v1/account", headers=dict(auth, **{"user-agent": UA, "accept": "application/json"}))
+            r = c.getresponse()
+            raw = r.read()
+            if r.status != 200:
+                _service_fail(r.status, raw)
+            return json.loads(raw.decode("utf-8"))
+        finally:
+            c.close()
+
+    def take_notices(self):
+        out = [NOTICES[n] for n in sorted(self.notices)]
+        self.notices.clear()
+        return out
+
     def _tools(self):
         tools = TOOLS + TRADE_TOOLS + INFO_TOOLS
         mt = macro_tool(self.app.settings.get("macros") or [])
@@ -442,8 +542,10 @@ class Brain:
         sb = Sentences(speak) if on_sentence else None
         said = []
         for _ in range(7):
-            body = {"model": s.get("model", MODELS[0][0]), "max_tokens": 1024, "system": system, "tools": self._tools(),
-                    "messages": msgs, "stream": True}
+            model = (SMART_MODEL if s.get("smart_mode") else STANDARD_MODEL) if self.mode() == "service" else s.get("model", MODELS[0][0])
+            body = {"model": model, "max_tokens": 1024, "tools": self._tools(), "stream": True,
+                    "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+                    "messages": with_cache(msgs)}
             if self.thinking == "off":
                 body["thinking"] = {"type": "disabled"}
             elif self.thinking == "low":

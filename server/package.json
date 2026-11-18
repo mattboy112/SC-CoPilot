@@ -1,0 +1,14 @@
+{
+  "name": "sc-copilot-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute sc-copilot --remote --file=schema.sql",
+    "test": "node test/run.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.164.0"
+  }
+}

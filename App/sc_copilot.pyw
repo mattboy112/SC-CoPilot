@@ -1025,19 +1025,31 @@ class App:
                 self.key_entry = entry(rt, width=44, show="•")
                 self.key_entry.insert(0, s.get("license_key", ""))
                 self.key_entry.pack(side="left", ipady=px(3))
-                FlatButton(rt, "Save", lambda: (self.set_and_save("license_key", self.key_entry.get().strip()), self.toast("Key saved")),
+                FlatButton(rt, "Save", lambda: (self.set_and_save("license_key", self.key_entry.get().strip()), self.toast("Key saved"),
+                                                self.refresh_plan()),
                            "primary", font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(px(6), 0))
                 FlatButton(rt, "Test", self.test_api, "normal", font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(px(6), 0))
                 if VER.STORE_URL:
                     FlatButton(rt, "Get a subscription", lambda: webbrowser.open(VER.STORE_URL), "ghost", font=F["small_bold"],
                                padx=10, pady=4).pack(side="left", padx=(px(6), 0))
+                rt = self.srow(c, "Your plan", "What you've used this month. Instant commands, callouts and the overlay never count.")
+                self.plan_label = label(rt, "Checking…", "small", "muted")
+                self.plan_label.pack(side="left")
+                for text, key in (("Refresh", None), ("Manage", "manage_url"), ("Upgrade", "upgrade_url")):
+                    FlatButton(rt, text, self.refresh_plan if key is None else (lambda k=key: self.open_plan_link(k)), "ghost",
+                               font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(px(6), 0))
+                rt = self.srow(c, "Smart replies", "Captain plan: sharper answers for tricky questions, with a monthly allowance. A little slower.")
+                sm = tk.BooleanVar(value=s.get("smart_mode", False))
+                check(rt, "Use smart replies", sm, lambda: self.set_and_save("smart_mode", bool(sm.get()))).pack(anchor="w")
+                self.refresh_plan()
             else:
                 label(c, "Coming soon: a monthly Co-Pilot subscription, so you won't need your own API key. Until it opens, "
                          "use your own key or leave the AI off.", "small", "low", wraplength=px(900), justify="left").pack(anchor="w", pady=(0, px(6)))
         if mode == "off":
             label(c, "The AI is off. Instant commands like “gear down”, macros, callouts, the overlay and the trade tab all still work.",
                   "small", "muted", wraplength=px(900), justify="left").pack(anchor="w", pady=(0, px(6)))
-        rt = self.srow(c, "Web lookups", "Lets it search the web for patch-dependent stuff (prices, where to buy, current meta). About a cent per search.")
+        rt = self.srow(c, "Web lookups", "Lets it search the web for patch-dependent stuff (prices, where to buy, current meta). " +
+                       ("Counts toward your plan's web lookups." if mode == "service" else "About a cent per search."))
         v = tk.BooleanVar(value=s.get("web_lookups", True))
         check(rt, "Allow web search", v, lambda v=v: (self.set_and_save("web_lookups", bool(v.get())), setattr(self.brain, "web_ok", True))).pack(anchor="w")
         rt = self.srow(c, "About you", "Anything it should always know: your ships, what you do, where you're based.")
@@ -2774,6 +2786,8 @@ class App:
                 reply = self.brain.ask(text, on_tool=lambda n, i: self.ui(("tool", self.tool_note(n, i))),
                                        on_sentence=on_sentence if speak else None)
                 self.ui(("copilot", reply))
+                for note in self.brain.take_notices():
+                    self.ui(("tool", note))
                 bits = []
                 if stt is not None:
                     bits.append(f"heard in {stt:.1f}s")
@@ -2787,6 +2801,38 @@ class App:
             finally:
                 self.thinking = False
         threading.Thread(target=go, daemon=True).start()
+
+    def refresh_plan(self):
+        lab = getattr(self, "plan_label", None)
+        if lab is None:
+            return
+
+        def work():
+            try:
+                d = self.brain.account()
+                self.plan_info = d or {}
+                text = BR.format_account(d) if d else "Add your subscription key above."
+            except BR.ApiError as ex:
+                self.plan_info = {}
+                text = str(ex)
+            except Exception:
+                self.plan_info = {}
+                text = "Couldn't reach the Co-Pilot service right now. Check your internet, then Refresh."
+
+            def show():
+                try:
+                    lab.config(text=text)
+                except tk.TclError:
+                    pass
+            self.root.after(0, show)
+        threading.Thread(target=work, daemon=True, name="plan").start()
+
+    def open_plan_link(self, key):
+        url = (getattr(self, "plan_info", None) or {}).get(key) or VER.STORE_URL
+        if url:
+            webbrowser.open(url)
+        else:
+            self.toast("Subscriptions aren't open yet")
 
     def tool_note(self, name, inp):
         nice = {"get_contracts": "checking contracts", "get_session_details": "checking session details",

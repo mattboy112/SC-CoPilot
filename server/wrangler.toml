@@ -1,0 +1,16 @@
+name = "sc-copilot-service"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+LICENSE_PROVIDER = "polar"
+POLAR_ORG_ID = ""
+LS_STORE_ID = ""
+TIER_MAP = "{}"
+MANAGE_URL = ""
+UPGRADE_URL = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sc-copilot"
+database_id = "replace-with-your-d1-database-id"
