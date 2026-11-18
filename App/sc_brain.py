@@ -209,7 +209,7 @@ class Brain:
         self.last_usage = {}
         self.conn = _Conn()
         self.web_ok = True
-        self.no_thinking = False
+        self.thinking = "off"
 
     def mode(self):
         m = self.app.settings.get("ai_mode") or "own_key"
@@ -381,9 +381,14 @@ class Brain:
         return {"content": content, "stop_reason": stop, "usage": usage}
 
     def test(self):
-        body = {"model": self.app.settings.get("model", MODELS[0][0]), "max_tokens": 20,
+        body = {"model": self.app.settings.get("model", MODELS[0][0]), "max_tokens": 64,
                 "messages": [{"role": "user", "content": "Reply with exactly: Co-pilot online."}]}
-        r = self._request(body)
+        try:
+            r = self._request(dict(body, thinking={"type": "disabled"}))
+        except ApiError as ex:
+            if ex.status != 400:
+                raise
+            r = self._request(dict(body, max_tokens=1024))
         return "".join(b.get("text", "") for b in r.get("content", []) if b.get("type") == "text").strip()
 
     def clear(self):
@@ -433,15 +438,19 @@ class Brain:
         sb = Sentences(speak) if on_sentence else None
         said = []
         for _ in range(7):
-            body = {"model": s.get("model", MODELS[0][0]), "max_tokens": 320, "system": system, "tools": self._tools(),
+            body = {"model": s.get("model", MODELS[0][0]), "max_tokens": 1024, "system": system, "tools": self._tools(),
                     "messages": msgs, "stream": True}
-            if self.no_thinking:
+            if self.thinking == "off":
                 body["thinking"] = {"type": "disabled"}
+            elif self.thinking == "low":
+                body["output_config"] = {"effort": "low"}
             try:
                 r = self._request(body, on_text=sb.feed if sb else None)
             except ApiError as ex:
-                if ex.status == 400 and not self.no_thinking and "thinking" in (ex.raw_msg or "").lower():
-                    self.no_thinking = True
+                raw = (ex.raw_msg or "").lower()
+                if ex.status == 400 and self.thinking != "auto" and any(w in raw for w in ("thinking", "effort", "output_config")):
+                    self.thinking = "low" if self.thinking == "off" else "auto"
+                    print(f"[ai] model refused that thinking setting, now using: {self.thinking}", flush=True)
                     for m in msgs:
                         if isinstance(m.get("content"), list):
                             m["content"] = [c for c in m["content"] if c.get("type") not in ("thinking", "redacted_thinking")]
@@ -458,6 +467,9 @@ class Brain:
                 if b.get("type") == "server_tool_use" and on_tool:
                     on_tool("web_search", b.get("input") or {})
             said += [b["text"].strip() for b in content if b.get("type") == "text" and b["text"].strip()]
+            if not any(b.get("type") == "text" for b in content) and r.get("stop_reason") not in ("tool_use", "pause_turn"):
+                print(f"[ai] no text in reply: stop={r.get('stop_reason')} blocks={[b.get('type') for b in content]} "
+                      f"usage={r.get('usage')} thinking={self.thinking}", flush=True)
             uses = [b for b in content if b.get("type") == "tool_use"]
             if r.get("stop_reason") == "pause_turn":
                 msgs.append({"role": "assistant", "content": content})
