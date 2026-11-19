@@ -4,6 +4,7 @@ soundfile>=0.13,<0.15
 faster-whisper>=1.1,<2
 edge-tts>=7.0,<8
 zstandard>=0.23,<1
+pillow>=11,<14
 certifi
 pyinstaller>=6.20,<7
 pyinstaller-hooks-contrib>=2026.1

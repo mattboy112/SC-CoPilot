@@ -22,6 +22,7 @@ The installer bundles the components marked **bundled**. Components marked **dow
 | [Whisper models](https://github.com/openai/whisper) (Systran faster-whisper conversions) | Speech recognition | MIT | downloaded |
 | [edge-tts](https://github.com/rany2/edge-tts) | Microsoft online voices | LGPL-3.0 | bundled as plain, replaceable Python files |
 | [python-zstandard](https://github.com/indygreg/python-zstandard) | Reading the game's default keybinds | BSD-3-Clause | bundled |
+| [Pillow](https://github.com/python-pillow/Pillow) | Shrinking screenshots for screen checks | MIT-CMU | bundled |
 | [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) | Kokoro offline voices | MIT | source only |
 | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) | Kokoro voice model | Apache-2.0 | downloaded (source only) |
 | [phonemizer](https://github.com/bootphon/phonemizer), [espeak-ng](https://github.com/espeak-ng/espeak-ng) | Kokoro pronunciation | GPL-3.0 | source only |

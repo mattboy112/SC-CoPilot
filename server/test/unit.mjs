@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { costUsd, worstCaseUsd } from "../src/plans.js";
+import { costUsd, worstCaseUsd, IMAGE_TOKENS } from "../src/plans.js";
 import { checkLicense, localOnly } from "../src/license.js";
 import { networkOf, missingConfig } from "../src/index.js";
 import { toolResultIds, usageScanner } from "../src/meter.js";
@@ -133,6 +133,19 @@ test("deeply nested tool schemas are refused before they can crash anything", ()
   assert.throws(() => sanitize({ messages: [{ role: "user", content: [{ type: deepArr }] }] }, opts), BadRequest);
   const odd = sanitize({ messages: [{ role: "assistant", content: [{ type: "tool_use", id: deepArr, name: "t", input: {} }] }] }, opts);
   assert.equal(odd.body.messages[0].content[0].id, "");
+});
+
+test("screenshots are counted, limited and reserved at a fixed token cost", () => {
+  const opts = { model: "claude-haiku-5-5", maxTokens: 1024, webLeft: 0, userId: "u" };
+  const data = "QUJD".repeat(5000);
+  const shot = { type: "image", source: { type: "base64", media_type: "image/png", data } };
+  const out = sanitize({ messages: [{ role: "user", content: [shot, { type: "text", text: "what's on screen" }] }] }, opts);
+  assert.deepEqual([out.images, out.imageChars], [1, data.length]);
+  assert.equal(out.body.messages[0].content[0].source.media_type, "image/png");
+  assert.throws(() => sanitize({ messages: [{ role: "user", content: [{ ...shot, source: { ...shot.source, type: "url", url: "https://x" } }] }] }, opts), BadRequest);
+  assert.throws(() => sanitize({ messages: [{ role: "user", content: [{ ...shot, source: { ...shot.source, data: data + "=" } }] }] }, opts), BadRequest);
+  const oneShot = worstCaseUsd("claude-haiku-5-5", 2_000 + IMAGE_TOKENS, 1024, 0);
+  assert.ok(oneShot < 0.003, "a screen check reserves well under a third of a cent");
 });
 
 let failed = 0;

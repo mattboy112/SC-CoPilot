@@ -131,6 +131,14 @@ def main():
         app.settings.update(license_key="CAPTAIN-KEY", smart_mode=True)
         b.ask("tricky question")
         check("captain smart mode sends the smart model", seen["body"]["model"] == "claude-sonnet-5-5")
+        import numpy as np
+        import sc_vision as VIS
+        frame = np.full((1080, 1920, 3), 60, np.uint8)
+        shot = VIS.snapshot((0, 0, 1920, 1080), grab=lambda rect: frame.copy())
+        res = b.check_ship(shot)
+        img = seen["body"]["messages"][0]["content"][0]
+        check("a real screenshot gets through the service to the AI", img.get("type") == "image" and img["source"]["data"] == shot["data"])
+        check("screen checks use the standard model", seen["body"]["model"] == "claude-haiku-5-5" and res["engines"] == "unknown")
         app.settings.update(license_key="NOPE")
         try:
             b.ask("hello")

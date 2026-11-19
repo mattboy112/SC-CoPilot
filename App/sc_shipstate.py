@@ -110,6 +110,15 @@ class ShipState:
             self.skipped[key] = (val, now)
         return None, "skip"
 
+    def observe(self, key, val, now=None):
+        """Record what a screen check actually saw, which beats anything remembered."""
+        if key not in GROUPS or val not in (True, False):
+            return
+        with self.lock:
+            self.v[key] = val
+            self.when[key] = time.time() if now is None else now
+            self.skipped.pop(key, None)
+
     def apply(self, action_id, intent=None, now=None):
         """Record that `action_id` was pressed. `intent` is what a toggle was pressed to achieve, if known."""
         now = time.time() if now is None else now

@@ -20,6 +20,7 @@ First public release.
 - Ask what ships you can buy: by system, type (fighter, heavy fighter, cargo, mining...), dealer or budget, with the dealer and price. "Ship dealers in Stanton" works too.
 - The AI stays in character as your ship's AI: answers first, in a sentence or two, with no disclaimers or talk about where it got the information.
 - Knows the ship's state (gear, NAV/SCM, power, lights, doors and more) from its own commands and your own key presses, so it doesn't undo things by repeating them. Forgets when you change ships.
+- Screen checks: after pre-flight the co-pilot takes a screenshot to make sure power and engines really came on, and fixes it once if not. If it remembers being flight ready, it looks before saying so. The AI can also look at the game when you ask "are my engines on?" or "what does that screen say?". Uses one AI reply per check; screenshots are never saved.
 - Quantum fixed for Star Citizen 4.10: "quantum mode" switches to NAV, "engage quantum" switches to NAV if needed and holds the engage button, and it tells you when no destination is set.
 - AI avatar on the overlay: a glowing core in a cloud of points that reacts when you talk, while it thinks, and to the loudness of its voice.
 - Two new voice effects, Deep and dark and Echo chamber, plus a Pitch slider that makes any voice deeper or lighter.
@@ -27,4 +28,4 @@ First public release.
 - Security (subscription service): requests are rebuilt from scratch so only what the app sends gets through, every request reserves its worst-case cost first, two questions in flight per key at most, usage is counted even if a request is cut off, one free trial per PC, daily spending brakes, throttled key guessing and floods, and no raw keys, PC IDs, full emails or request logs stored.
 - New logo, shown on the taskbar, window, desktop shortcut, installer and website.
 - First-run setup, automatic updates, Copy diagnostics for bug reports.
-- 324 automated app tests and 48 service checks, including attack attempts, run on every change.
+- 349 automated app tests and 50 service checks, including attack attempts, run on every change.

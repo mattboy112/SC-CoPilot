@@ -127,7 +127,7 @@ npx wrangler d1 execute sc-copilot --remote --command "SELECT period, COUNT(*) A
 | `src/meter.js` | Reads the token counts out of a copy of the streamed answer, so each reply's real cost is recorded even if the player hangs up |
 | `src/store.js` | The database: license cache, monthly and daily usage, per-minute rate limit, PCs per key, one trial per PC |
 | `src/plans.js` | Plans, limits and Anthropic's prices |
-| `test/unit.mjs`, `test/run.mjs` | 13 unit checks, then 35 checks against a fake Anthropic and a fake Polar (`npm test`), including attack attempts |
+| `test/unit.mjs`, `test/run.mjs` | 14 unit checks, then 36 checks against a fake Anthropic and a fake Polar (`npm test`), including attack attempts |
 | `test/app_e2e.py` | The app's real AI code against the service running locally |
 
 Rules it enforces, per key:
@@ -142,7 +142,7 @@ Rules it enforces, per key:
 
 Safety rules, for everyone:
 
-- Only plain text, the app's own tools and web search get through. Anthropic's paid extras (code execution, web fetch, MCP connectors, file uploads, priority tier, fast mode, beta features) are stripped, so a modified app can't bill them to you.
+- Only plain text, the app's own tools, web search and up to two inline screenshots (for screen checks, each reserved at 6,000 tokens) get through. Anthropic's paid extras (code execution, web fetch, MCP connectors, file uploads, priority tier, fast mode, beta features) are stripped, so a modified app can't bill them to you.
 - Anthropic's account errors (for example "credit balance too low") are never shown to players.
 - Unknown license keys are checked with Polar at most 10 times a minute per network, and at most 60 times a minute in total, so nobody can guess keys or flood Polar. Customers whose key already worked are never held back by these limits, and if Polar is down their key keeps working for 2 hours.
 - Each network can make at most 120 requests a minute before anything touches the database (a normal player makes a handful), so one flooding machine can't knock the service over for everyone. Cloudflare's free plan has a daily request cap; move to the paid Workers plan before launch so a flood can't use it up.

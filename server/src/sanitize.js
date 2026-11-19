@@ -8,6 +8,10 @@ const MAX_BLOCKS = 100;
 const MAX_TOOL_RESULT = 10_000;
 
 const MAX_DEPTH = 24;
+export const MAX_IMAGES = 2;
+export const MAX_IMAGE_CHARS = 1_000_000;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 const obj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -34,6 +38,25 @@ function textBlock(b) {
   return withCache({ type: "text", text: b.text }, b.cache_control);
 }
 
+function imageBlock(b, ctx) {
+  const src = obj(b) ? b.source : null;
+  if (!obj(src) || src.type !== "base64" || !IMAGE_TYPES.has(src.media_type) || typeof src.data !== "string") {
+    throw new BadRequest("Screenshots must be JPEG, PNG or WebP pictures sent inline.");
+  }
+  if (src.data.length > MAX_IMAGE_CHARS || src.data.length % 4 !== 0 || !BASE64.test(src.data)) {
+    throw new BadRequest("That screenshot is too big or isn't a valid picture.");
+  }
+  if (++ctx.images > MAX_IMAGES) throw new BadRequest(`At most ${MAX_IMAGES} screenshots per request.`);
+  ctx.imageChars += src.data.length;
+  return withCache({ type: "image", source: { type: "base64", media_type: src.media_type, data: src.data } }, b.cache_control);
+}
+
+function toolResultPart(b, ctx) {
+  if (obj(b) && b.type === "image") return imageBlock(b, ctx);
+  const t = textBlock(b);
+  return { ...t, text: t.text.slice(0, MAX_TOOL_RESULT) };
+}
+
 function webResults(content) {
   if (Array.isArray(content)) {
     return content.filter((r) => obj(r) && r.type === "web_search_result").slice(0, 20).map((r) => {
@@ -48,20 +71,21 @@ function webResults(content) {
   throw new BadRequest("Web search results aren't in the expected shape.");
 }
 
-function block(b, role) {
+function block(b, role, ctx) {
   if (!obj(b)) throw new BadRequest("Message content isn't in the expected shape.");
   const assistant = role === "assistant";
   switch (b.type) {
     case "text":
       return textBlock(b);
+    case "image":
+      if (assistant) break;
+      return imageBlock(b, ctx);
     case "tool_use":
       if (!assistant || !NAME.test(String(b.name))) break;
       return withCache({ type: "tool_use", id: str(b.id, 200), name: b.name, input: obj(b.input) ? shallow(b.input, "A tool call") : {} }, b.cache_control);
     case "tool_result": {
       if (assistant) break;
-      const content = Array.isArray(b.content)
-        ? b.content.slice(0, 10).map(textBlock).map((t) => ({ ...t, text: t.text.slice(0, MAX_TOOL_RESULT) }))
-        : str(b.content, MAX_TOOL_RESULT);
+      const content = Array.isArray(b.content) ? b.content.slice(0, 10).map((x) => toolResultPart(x, ctx)) : str(b.content, MAX_TOOL_RESULT);
       const out = { type: "tool_result", tool_use_id: str(b.tool_use_id, 200), content };
       if (b.is_error === true) out.is_error = true;
       return withCache(out, b.cache_control);
@@ -82,7 +106,7 @@ function block(b, role) {
   throw new BadRequest(`Content of type "${str(b.type, 40)}" isn't supported by the Co-Pilot service.`);
 }
 
-function messages(list) {
+function messages(list, ctx) {
   if (!Array.isArray(list) || !list.length || list.length > MAX_MESSAGES) throw new BadRequest("The conversation isn't in the expected shape.");
   return list.map((m) => {
     if (!obj(m) || (m.role !== "user" && m.role !== "assistant")) throw new BadRequest("Each message needs a user or assistant role.");
@@ -90,7 +114,7 @@ function messages(list) {
     if (!Array.isArray(m.content) || !m.content.length || m.content.length > MAX_BLOCKS) {
       throw new BadRequest("Message content isn't in the expected shape.");
     }
-    return { role: m.role, content: m.content.map((b) => block(b, m.role)) };
+    return { role: m.role, content: m.content.map((b) => block(b, m.role, ctx)) };
   });
 }
 
@@ -151,7 +175,8 @@ function thinking(t, maxTokens) {
 export function sanitize(input, { model, maxTokens, webLeft, userId }) {
   if (!obj(input)) throw new BadRequest("That request wasn't a JSON object.");
   const max = Math.max(1, Math.min(Math.floor(Number(input.max_tokens)) || maxTokens, maxTokens));
-  const body = { model, max_tokens: max, messages: messages(input.messages), metadata: { user_id: userId } };
+  const ctx = { images: 0, imageChars: 0 };
+  const body = { model, max_tokens: max, messages: messages(input.messages, ctx), metadata: { user_id: userId } };
   const sys = system(input.system);
   if (sys !== undefined) body.system = sys;
   const t = tools(input.tools, webLeft);
@@ -169,5 +194,5 @@ export function sanitize(input, { model, maxTokens, webLeft, userId }) {
     if (stops.length) body.stop_sequences = stops;
   }
   if (input.stream === true) body.stream = true;
-  return { body, web: t.web, dropped: t.dropped };
+  return { body, web: t.web, dropped: t.dropped, images: ctx.images, imageChars: ctx.imageChars };
 }

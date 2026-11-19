@@ -386,6 +386,32 @@ async function main() {
       assert.equal((await ask("CAPTAIN-KEY", "", { messages: "nope" })).status, 400);
     });
 
+    await check("screenshots: a couple of inline pictures go through, anything else doesn't", async () => {
+      const pic = Buffer.alloc(30_000, 7).toString("base64");
+      const shot = (data = pic, media_type = "image/jpeg") => ({ type: "image", source: { type: "base64", media_type, data } });
+      const look = await ask("CAPTAIN-KEY", "", { messages: [{ role: "user", content: [shot(), { type: "text", text: "Report the ship's state." }] }] });
+      assert.equal(look.status, 200);
+      await look.text();
+      assert.equal(lastBody.messages[0].content[0].source.data, pic, "the picture reaches Anthropic untouched");
+      const inTool = await ask("CAPTAIN-KEY", "", { messages: [
+        { role: "user", content: "are my engines on" },
+        { role: "assistant", content: [{ type: "tool_use", id: "toolu_look", name: "look_at_screen", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_look", content: [shot(), { type: "text", text: "screenshot" }] }] },
+      ] });
+      assert.equal(inTool.status, 200);
+      await inTool.text();
+      const three = await ask("CAPTAIN-KEY", "", { messages: [{ role: "user", content: [shot(), shot(), shot()] }] });
+      assert.equal(three.status, 400);
+      assert.equal((await ask("CAPTAIN-KEY", "", { messages: [{ role: "user", content: [shot(pic, "image/svg+xml")] }] })).status, 400);
+      assert.equal((await ask("CAPTAIN-KEY", "", { messages: [{ role: "user", content: [shot("not base64!!")] }] })).status, 400);
+      assert.equal((await ask("CAPTAIN-KEY", "", { messages: [{ role: "user", content: [shot("A".repeat(1_000_004))] }] })).status, 400);
+      const fromAssistant = await ask("CAPTAIN-KEY", "", { messages: [{ role: "user", content: "hi" }, { role: "assistant", content: [shot()] }] });
+      assert.equal(fromAssistant.status, 400);
+      const big = await ask("CAPTAIN-KEY", "", { messages: [{ role: "user", content: [shot(), { type: "text", text: "x".repeat(130_000) }] }] });
+      assert.equal(big.status, 413, "the text part still has its own size limit");
+      await big.text();
+    });
+
     await check("SECURITY: hanging up mid-answer still gets counted and billed", async () => {
       const r = await ask("HANGUP-KEY", "slow answer please");
       const reader = r.body.getReader();

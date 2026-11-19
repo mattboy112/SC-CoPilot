@@ -18,7 +18,9 @@ export const WEB_RESULT_TOKENS = 30_000;
 export const TOOL_PROMPT_TOKENS = 2_000;
 
 export const MAX_TOKENS = 1024;
-export const MAX_BODY_BYTES = 120_000;
+export const MAX_BODY_BYTES = 2_200_000;
+export const MAX_TEXT_BYTES = 120_000;
+export const IMAGE_TOKENS = 6_000;
 export const MAX_DEVICES = 3;
 export const DEVICE_WINDOW_DAYS = 30;
 export const LICENSE_CACHE_SECONDS = 600;

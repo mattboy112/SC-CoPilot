@@ -179,6 +179,7 @@ class Overlay:
         self.game_mon = None
         self.game_mon_t = 0.0
         self.win = None
+        self.rect = None
         self.rows = {}
         self.last_sig = None
         self.visible = False
@@ -243,6 +244,7 @@ class Overlay:
             except tk.TclError:
                 pass
         self.win = None
+        self.rect = None
         self.last_sig = None
         self.visible = False
 
@@ -272,6 +274,11 @@ class Overlay:
         x = l + m if "left" in corner else l + (r - l - w) // 2 if "center" in corner else r - w - m
         y = t + m if corner.startswith("top") else b - h - m - 40
         self.win.geometry(f"+{x}+{y}")
+        self.rect = (x, y, x + w, y + h)
+
+    def screen_rect(self):
+        """Where the overlay is on screen (left, top, right, bottom) while it's showing, so screenshots can black it out."""
+        return self.rect if self.visible and self.win is not None else None
 
     def _track_game_monitor(self):
         now = time.time()

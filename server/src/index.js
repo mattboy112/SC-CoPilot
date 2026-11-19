@@ -1,5 +1,5 @@
 import {
-  STANDARD_MODEL, SMART_MODEL, MAX_TOKENS, MAX_BODY_BYTES, MAX_DEVICES, DEVICE_WINDOW_DAYS, LICENSE_CACHE_SECONDS,
+  STANDARD_MODEL, SMART_MODEL, MAX_TOKENS, MAX_BODY_BYTES, MAX_TEXT_BYTES, IMAGE_TOKENS, MAX_DEVICES, DEVICE_WINDOW_DAYS, LICENSE_CACHE_SECONDS,
   CALLS_PER_REPLY, LOOKUPS_PER_10_MIN, TRIAL_DAILY_USD, TRIALS_PER_NETWORK_DAY, STALE_LICENSE_SECONDS, TOOL_ID_SECONDS,
   INVALID_CACHE_SECONDS, PROVIDER_CHECKS_PER_MIN, TRIALS_WIDE_FACTOR, MAX_IN_FLIGHT, IN_FLIGHT_SECONDS, DAILY_BUDGET_USD,
   tiers, costUsd, worstCaseUsd,
@@ -263,8 +263,9 @@ async function messages(req, env, ctx) {
   } catch {
     return fail(400, "invalid_request_error", "That request is nested too deeply.");
   }
-  const upstreamBytes = new TextEncoder().encode(upstreamBody).byteLength;
-  const reserved = Math.ceil(worstCaseUsd(model, upstreamBytes, clean.body.max_tokens, reservedWeb) * 1e6);
+  const textBytes = new TextEncoder().encode(upstreamBody).byteLength - clean.imageChars;
+  if (textBytes > MAX_TEXT_BYTES) return fail(413, "request_too_large", "That request is too big for the Co-Pilot service.");
+  const reserved = Math.ceil(worstCaseUsd(model, textBytes + clean.images * IMAGE_TOKENS, clean.body.max_tokens, reservedWeb) * 1e6);
 
   const resets = S.resetsAt(a.tier, now);
   const quota = (message, resetsAt) => fail(429, "quota_exceeded", message, { resets_at: resetsAt, plan: a.tierId });

@@ -46,6 +46,7 @@ import sc_avatar as AV
 import sc_shipstate as SS
 import sc_update as UPD
 import sc_version as VER
+import sc_vision as VIS
 import sc_overlay as OV
 import sc_quick as Q
 import sc_secret as SEC
@@ -76,7 +77,7 @@ SCALE = [1.0]
 
 DEFAULTS = {
     "api_key": "", "model": BR.MODELS[0][0], "assistant_name": "Co-Pilot", "voice": "en-GB-RyanNeural", "tts_engine": "neural",
-    "tts_rate": 0, "volume": 90, "chirps": True, "speak_answers": True, "instant_commands": True, "web_lookups": True,
+    "tts_rate": 0, "volume": 90, "chirps": True, "speak_answers": True, "instant_commands": True, "web_lookups": True, "screen_checks": True,
     "pilot_notes": "", "ptt": {"kind": "key", "vk": 0x05, "name": "Mouse 4"}, "mic": None, "stt_model": "base.en",
     "stt_device": "cpu", "callouts": {c: True for c, _ in CO.CATEGORIES}, "install_dir": "", "geometry": "", "tab": "overview",
     "kokoro_voice": V.KOKORO_DEFAULT, "voice_fx": "computer", "voice_fx_amount": 100, "voice_pitch": 0, "macros": MAC.defaults(),
@@ -1039,7 +1040,8 @@ class App:
                 if VER.STORE_URL:
                     FlatButton(rt, "Get a subscription", lambda: webbrowser.open(VER.STORE_URL), "ghost", font=F["small_bold"],
                                padx=10, pady=4).pack(side="left", padx=(px(6), 0))
-                rt = self.srow(c, "Your plan", "What you've used this month. Instant commands, callouts and the overlay never count.")
+                rt = self.srow(c, "Your plan", "What you've used this month. Instant commands, callouts and the overlay never count. "
+                                               "A screen double-check counts as one reply.")
                 self.plan_label = label(rt, "Checking…", "small", "muted")
                 self.plan_label.pack(side="left")
                 for text, key in (("Refresh", None), ("Manage", "manage_url"), ("Upgrade", "upgrade_url")):
@@ -1059,6 +1061,12 @@ class App:
                        ("Counts toward your plan's web lookups." if mode == "service" else "About a cent per search."))
         v = tk.BooleanVar(value=s.get("web_lookups", True))
         check(rt, "Allow web search", v, lambda v=v: (self.set_and_save("web_lookups", bool(v.get())), setattr(self.brain, "web_ok", True))).pack(anchor="w")
+        ok_look, why_not = VIS.available()
+        rt = self.srow(c, "Screen checks", "Lets it look at the game to check itself. After pre-flight it takes a screenshot to make sure "
+                       "power and engines really came on, and fixes it if not. You can also ask “are my engines on?”. "
+                       "Each check uses one AI reply. Screenshots go to the AI and are never saved." + ("" if ok_look else f" {why_not}"))
+        sc_v = tk.BooleanVar(value=s.get("screen_checks", True))
+        check(rt, "Double-check with a screenshot", sc_v, lambda: self.set_and_save("screen_checks", bool(sc_v.get()))).pack(anchor="w")
         rt = self.srow(c, "About you", "Anything it should always know: your ships, what you do, where you're based.")
         ne = entry(rt, width=70)
         ne.insert(0, s.get("pilot_notes", ""))
@@ -1961,6 +1969,8 @@ class App:
                 done, skipped = MAC.run(m, self.binds, B.ACTION_INDEX, ship=self.ship)
                 self.ui(("action", f"{m['name']}: pressed {', '.join(done) or 'nothing'}"
                                    + (f" · skipped {', '.join(skipped)}" if skipped else "")))
+                if any(st.get("action") == "flight_ready" for st in m.get("steps") or []) and not any("isn't running" in x for x in skipped):
+                    self.verify_flight(pressed=False)
                 if not done and skipped:
                     if any("isn't running" in x for x in skipped):
                         self.speaker.say("Star Citizen isn't running.", priority=True)
@@ -2708,8 +2718,12 @@ class App:
         if a["id"] in SS.EFFECT:
             press_id, note = self.ship.plan(a["id"], self.can_press)
             key = SS.EFFECT[a["id"]][0]
+            if note == "skip" and a["id"] == "flight_ready":
+                self.ui(("action", f"{a['label']}: not pressed yet, I remember being flight ready, so checking the HUD first"))
+                self.verify_flight(pressed=False, from_memory=True)
+                return
             if note == "skip":
-                said = "Already flight ready." if a["id"] == "flight_ready" else (self.ship.describe(key) or "Already done.")
+                said = self.ship.describe(key) or "Already done."
                 say = said + " Say it again if I've got that wrong."
                 self.ui(("action", f"{a['label']}: not pressed, it's already like that (toggle would undo it)"))
                 self.ui(("copilot", say))
@@ -2736,10 +2750,67 @@ class App:
             self.speaker.say(say, priority=True)
         if t_release:
             self.ui(("tool", f"instant command · heard in {stt:.1f}s · done {time.time() - t_release:.1f}s after you let go"))
+        if ok and use["id"] == "flight_ready":
+            self.verify_flight(pressed=True)
 
     def can_press(self, aid):
         a = B.ACTION_INDEX.get(aid)
         return bool(a) and self.binds.pressable(a["sc"])
+
+    def can_look(self):
+        return bool(self.settings.get("screen_checks", True)) and VIS.available()[0] and self.brain.ready()
+
+    def look(self):
+        """A screenshot of Star Citizen for the AI, with our overlay blacked out. Returns (shot, "") or (None, why not)."""
+        ok, why = VIS.available()
+        if not ok:
+            return None, why
+        if not B.game_focused():
+            return None, "Star Citizen isn't on screen."
+        rect = VIS.client_rect(B.game_window())
+        if not rect:
+            return None, "Couldn't find the game window."
+        hide = self.overlay.screen_rect() if self.overlay else None
+        if hide:
+            hide = (hide[0] - 8, hide[1] - 8, hide[2] + 8, hide[3] + 8)
+        try:
+            shot = VIS.snapshot(rect, hide=[hide])
+        except Exception as ex:
+            print(f"[{time.strftime('%H:%M:%S')}] screenshot failed: {ex}", flush=True)
+            shot = None
+        if not shot:
+            return None, "The picture came back blank. If Star Citizen is in exclusive fullscreen, switch it to borderless."
+        self.ui(("tool", f"looked at the screen ({shot['width']}x{shot['height']}, {shot['bytes'] // 1024} KB)"))
+        return shot, ""
+
+    def verify_flight(self, pressed, from_memory=False):
+        """After pre-flight, look at the HUD to make sure power and engines really came on, and fix it once if they didn't."""
+        if not self.can_look() or getattr(self, "verifying", False):
+            if from_memory:
+                self.say_now("Already flight ready. Say it again if I've got that wrong.")
+            return
+        fc = VIS.FlightCheck(look=self.look, ask_ai=self.brain.check_ship, press=self.press_action, say=self.say_now,
+                             log=lambda t: self.ui(("tool", t)), can_press=self.can_press, ship=self.ship)
+
+        def go():
+            self.verifying = True
+            try:
+                fc.run(pressed, from_memory)
+            except Exception as ex:
+                print(f"[{time.strftime('%H:%M:%S')}] flight check failed: {ex}", flush=True)
+            finally:
+                self.verifying = False
+        threading.Thread(target=go, daemon=True, name="flightcheck").start()
+
+    def press_action(self, aid):
+        a = B.ACTION_INDEX[aid]
+        ok, msg = self.binds.press(a["sc"])
+        self.ui(("action", f"{a['label']}: {'pressed ' + msg if ok else 'NOT pressed, ' + msg} (screen check)"))
+        return ok, (None if ok else self.press_problem(a, msg))
+
+    def say_now(self, text):
+        self.ui(("copilot", text))
+        self.speaker.say(text, priority=True)
 
     def quantum_engage(self, cmd, t_release=None, stt=0.0):
         """Star Citizen 4.x: you can only jump in NAV mode, with a destination set, by holding the engage button."""
@@ -2996,7 +3067,7 @@ def single_instance():
 def selftest():
     """Used by the build server: can the packaged app load everything it needs?"""
     report, bad = [], 0
-    for mod in ("numpy", "sounddevice", "soundfile", "faster_whisper", "ctranslate2", "edge_tts", "zstandard", "onnxruntime"):
+    for mod in ("numpy", "sounddevice", "soundfile", "faster_whisper", "ctranslate2", "edge_tts", "zstandard", "onnxruntime", "PIL.Image"):
         try:
             __import__(mod)
             report.append(f"ok   {mod}")
@@ -3008,6 +3079,14 @@ def selftest():
         ok = P.resource(name).exists()
         bad += 0 if ok else 1
         report.append(f"{'ok  ' if ok else 'FAIL'} resource {name}")
+    try:
+        import numpy as np
+        jpeg = VIS.encode(VIS.shrink(np.full((720, 1280, 3), 40, np.uint8)))
+        assert jpeg[:2] == b"\xff\xd8"
+        report.append("ok   screenshot encoding")
+    except Exception as ex:
+        bad += 1
+        report.append(f"FAIL screenshot encoding: {type(ex).__name__}: {ex}")
     try:
         root = tk.Tk()
         root.destroy()

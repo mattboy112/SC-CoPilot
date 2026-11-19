@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 echo Installing the packages for SC Co-Pilot...
-echo (numpy, sounddevice, faster-whisper, edge-tts, zstandard, kokoro-onnx, soundfile)
+echo (numpy, sounddevice, faster-whisper, edge-tts, zstandard, kokoro-onnx, soundfile, pillow)
 echo.
 where python >nul 2>nul || (echo Python wasn't found. Install Python 3.12 from the Microsoft Store, then run this again. & pause & exit /b 1)
 python -m pip install --user -r requirements.txt

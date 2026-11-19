@@ -10,6 +10,7 @@ from datetime import datetime
 import sc_lines as LN
 import sc_macros as MAC
 import sc_version as VER
+import sc_vision as VIS
 from sc_binds import ACTION_INDEX, ACTIONS
 from sc_log import ago, clean_item, clean_place, hm
 
@@ -41,6 +42,7 @@ How you work:
 - Lead with the answer. Don't say you're checking or looking something up.
 - The log does NOT show shield, hull, fuel or ammo levels, the wallet balance, mission rewards, exact position, or the names of most other players. If asked, say you've got no reading on that, rather than guessing.
 - Never make up game data.
+- You can see the game screen with look_at_screen. Use it whenever the answer is on the screen rather than in the log: whether power, engines, gear, shields or quantum are on, what an MFD or prompt says, or when the pilot asks you to check, look or confirm something. Never state power, engine or gear status from memory alone; look first. Say what you see as fact.
 - Only press controls when the pilot asks for that action in their current message. After pressing, confirm in a few words ("Gear down."). If a control has no key, say so and that it can be auto-assigned on the Controls tab.
 - The pilot talks naturally and won't use the same words twice. Speech-to-text also mishears things ("Vallance" is "balance", "sheilds" is "shields", "flairs" is "flares", "woke" is "what"). If a word makes no sense, it's a mishearing: answer the obvious question and never repeat the odd word back. Work out what they meant and act on it right away. Don't ask for confirmation unless two different actions are genuinely equally likely; a wrong guess on a harmless control is better than making them repeat themselves in a fight.
 - Star Citizen has no "highest threat" key. For "highest threat", "biggest threat", "who's shooting me" or similar, press target_attacker (it cycles through ships attacking the pilot); if nothing is attacking, target_hostile.
@@ -69,6 +71,11 @@ TOOLS = [
          "action": {"type": "string", "enum": [a[0] for a in ACTIONS]}, "times": {"type": "integer", "minimum": 1, "maximum": 6}},
          "required": ["action"]}, "maxItems": 8}}, "required": ["actions"]}},
 ]
+
+
+LOOK_TOOL = {"name": "look_at_screen", "description": "Take a screenshot of Star Citizen and look at it: the HUD, cockpit screens (MFDs), prompts and what's in view. Use it to check power, engines, landing gear, shields, quantum status, or anything the pilot asks you to look at or confirm.",
+             "input_schema": {"type": "object", "properties": {}}}
+MAX_SHOTS_PER_TURN = 2
 
 
 TRADE_TOOLS = [
@@ -493,6 +500,19 @@ class Brain:
             r = self._request(dict(body, max_tokens=1024))
         return "".join(b.get("text", "") for b in r.get("content", []) if b.get("type") == "text").strip()
 
+    def check_ship(self, shot):
+        """Ask the AI what a screenshot shows about power, engines and gear. Returns sc_vision.parse_check's dict."""
+        if not self.ready():
+            raise RuntimeError(self.not_ready_reason())
+        s = self.app.settings
+        model = (STANDARD_MODEL if self.mode() == "service" else s.get("model", MODELS[0][0]))
+        body = {"model": model, "max_tokens": 200, "stream": True, "thinking": {"type": "disabled"},
+                "system": VIS.CHECK_SYSTEM,
+                "messages": [{"role": "user", "content": [VIS.image_block(shot), {"type": "text", "text": "Report the ship's state."}]}]}
+        r = self._request(body)
+        self.last_usage = r.get("usage", {})
+        return VIS.parse_check("".join(b.get("text", "") for b in r.get("content", []) if b.get("type") == "text"))
+
     def clear(self):
         with self.lock:
             self.history = []
@@ -536,7 +556,13 @@ class Brain:
             tools = tools + [mt]
         if self.web_ok and self.app.settings.get("web_lookups", True):
             tools = tools + [WEB_TOOL]
+        if self.can_look():
+            tools = tools + [LOOK_TOOL]
         return tools
+
+    def can_look(self):
+        f = getattr(self.app, "can_look", None)
+        return bool(f and f())
 
     def _ask(self, text, on_tool, on_sentence):
         s = self.app.settings
@@ -612,7 +638,16 @@ class Brain:
                         out = self.run_tool(u.get("name"), u.get("input") or {})
                     except Exception as ex:
                         out = f"Tool error: {ex}"
-                    results.append({"type": "tool_result", "tool_use_id": u.get("id"), "content": str(out)[:8000]})
+                    if isinstance(out, dict) and out.get("image"):
+                        shots = sum(1 for m in msgs for c in (m["content"] if isinstance(m.get("content"), list) else [])
+                                    if c.get("type") == "tool_result" and isinstance(c.get("content"), list))
+                        if shots >= MAX_SHOTS_PER_TURN:
+                            out = "Already looked twice this turn. Answer from those pictures."
+                    if isinstance(out, dict) and out.get("image"):
+                        content = [VIS.image_block(out["image"]), {"type": "text", "text": out.get("text", "")}]
+                    else:
+                        content = str(out)[:8000]
+                    results.append({"type": "tool_result", "tool_use_id": u.get("id"), "content": content})
                 msgs.append({"role": "user", "content": results})
                 continue
             break
@@ -699,6 +734,11 @@ class Brain:
         if name == "find_keybind":
             rows = self.app.binds.search(inp.get("query", ""))
             return json.dumps({"results": rows, "keys_from": self.app.binds.source}) if rows else "No action matched. Try another word."
+        if name == "look_at_screen":
+            shot, why = self.app.look()
+            if not shot:
+                return f"No picture: {why}"
+            return {"image": shot, "text": f"Star Citizen screenshot taken at {datetime.now():%H:%M:%S}. Black boxes are the co-pilot's own window."}
         if name == "press_controls":
             done = []
             for item in (inp.get("actions") or [])[:8]:
@@ -709,6 +749,10 @@ class Brain:
                 times = max(1, min(int(item.get("times") or 1), 6))
                 ok, msg = self.app.binds.press(a["sc"], times)
                 done.append(f"{a['label']}: {'pressed ' + msg + (f' x{times}' if times > 1 else '') if ok else 'NOT pressed, ' + msg}")
+                ship = getattr(self.app, "ship", None)
+                if ok and ship is not None:
+                    for _ in range(times):
+                        ship.apply(a["id"])
                 time.sleep(0.12)
             self.app.note_action("; ".join(done))
             return "\n".join(done)
