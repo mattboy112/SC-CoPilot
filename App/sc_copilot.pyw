@@ -47,6 +47,9 @@ import sc_shipstate as SS
 import sc_update as UPD
 import sc_version as VER
 import sc_vision as VIS
+import sc_listen as VA
+import sc_timers as TM
+import sc_memory as MEM
 import sc_overlay as OV
 import sc_quick as Q
 import sc_secret as SEC
@@ -77,7 +80,7 @@ SCALE = [1.0]
 
 DEFAULTS = {
     "api_key": "", "model": BR.MODELS[0][0], "assistant_name": "Co-Pilot", "voice": "en-GB-RyanNeural", "tts_engine": "neural",
-    "tts_rate": 0, "volume": 90, "chirps": True, "speak_answers": True, "instant_commands": True, "web_lookups": True, "screen_checks": True,
+    "tts_rate": 0, "volume": 90, "chirps": True, "talk_mode": "ptt", "va_wake": True, "va_sensitivity": "medium", "language": "en", "speak_answers": True, "instant_commands": True, "web_lookups": True, "screen_checks": True,
     "pilot_notes": "", "ptt": {"kind": "key", "vk": 0x05, "name": "Mouse 4"}, "mic": None, "stt_model": "base.en",
     "stt_device": "cpu", "callouts": {c: True for c, _ in CO.CATEGORIES}, "install_dir": "", "geometry": "", "tab": "overview",
     "kokoro_voice": V.KOKORO_DEFAULT, "voice_fx": "computer", "voice_fx_amount": 100, "voice_pitch": 0, "macros": MAC.defaults(),
@@ -374,7 +377,7 @@ class App:
         self.nv = None
         self.overlay_diag_t = 0.0
 
-        self.edge_voices = V.edge_voice_list(EDGE_CACHE)
+        self.edge_voices = V.edge_voice_list(EDGE_CACHE, lang=self.settings.get("language", "en"))
         self.trade_view = None
         self.trade_busy = False
         self.macro_running = False
@@ -406,6 +409,14 @@ class App:
         self.speaker.start()
         self.ptt = V.PTTWatcher(lambda: self.settings.get("ptt"), self.ptt_down, self.ptt_up)
         self.ptt.start()
+        self.timers = TM.Timers(P.DATA_DIR / "timers.json")
+        self.timer_t = 0.0
+        self.va_hearing_on = False
+        self.va_handling = False
+        self.wake = VA.WakeGate()
+        self.last_ignored = 0.0
+        self.va = VA.VoiceActivation(lambda: self.settings, self.va_busy, self.va_heard, self.va_hearing)
+        self.va.start()
         self.load_stt()
         save_settings(self.settings)
         if self.settings.get("tts_engine") == "kokoro" and self.kokoro.installed():
@@ -1074,6 +1085,18 @@ class App:
         save_n = lambda e=None: self.set_and_save("pilot_notes", ne.get().strip())
         ne.bind("<FocusOut>", save_n)
         ne.bind("<Return>", save_n)
+        rt = self.srow(c, "Things it remembers", "Say “remember my main ship is a Cutlass Black” or “forget the Cutlass”. "
+                                                 "One note per line; edit or delete lines here.")
+        mem = tk.Text(rt, width=70, height=5, font=F["small"], bg=C["input"], fg=C["hi"], insertbackground=C["accent"],
+                      relief="flat", highlightthickness=1, highlightbackground=C["line"], highlightcolor=C["accent"], wrap="word")
+        mem.insert("1.0", "\n".join(MEM.items(s)))
+        mem.pack(side="left")
+        self.mem_box = mem
+
+        def save_mem(e=None):
+            self.settings["memories"] = [MEM.clean(x) for x in mem.get("1.0", "end").splitlines() if MEM.clean(x)][:MEM.MAX_ITEMS]
+            save_settings(self.settings)
+        mem.bind("<FocusOut>", save_mem)
 
         c = self.scard(p, "Voice")
         rt = self.srow(c, "Co-pilot name", "What it calls itself. Saying it in a command is fine, it gets ignored.")
@@ -1096,7 +1119,13 @@ class App:
             self.kokoro_btn.pack(side="left")
             self.kokoro_lbl = label(rt, "  One-time download from GitHub. Then pick it as the engine.", "small", "dim")
             self.kokoro_lbl.pack(side="left")
-        rt = self.srow(c, "Microsoft voice", f"{len(self.edge_voices)} English voices.")
+        lang_name = V.LANGUAGE_NAMES.get(s.get("language", "en"), "English")
+        rt = self.srow(c, "Language", "What it listens for and answers in. Instant commands and callouts stay in English, but "
+                                      "you can rewrite any line on the Personality tab or install a community line pack. "
+                                      "Other languages download a bigger speech model the first time.")
+        chooser(rt, V.LANGUAGES, s.get("language", "en"),
+                lambda v: threading.Thread(target=self.set_language, args=(v,), daemon=True).start(), 30).pack(side="left")
+        rt = self.srow(c, "Microsoft voice", f"{len(self.edge_voices)} {lang_name} voices.")
         chooser(rt, self.edge_voices, s.get("voice"), lambda v: (self.set_and_save("voice", v), self.preview_voice()), 34).pack(side="left")
         FlatButton(rt, "Refresh list", lambda: threading.Thread(target=self.refresh_edge_voices, daemon=True).start(), "normal",
                    font=F["small_bold"], padx=10, pady=4).pack(side="left", padx=(px(8), 0))
@@ -1121,6 +1150,17 @@ class App:
             check(rt, text, bv, lambda k=key, bv=bv: self.set_and_save(k, bool(bv.get()))).pack(anchor="w")
 
         c = self.scard(p, "Push-to-talk and speech recognition")
+        rt = self.srow(c, "How you talk to it", "Voice activation listens all the time, so you don't need a button. "
+                                                "Push-to-talk keeps working either way.")
+        chooser(rt, VA.TALK_MODES, s.get("talk_mode", "ptt"), lambda v: self.set_and_save("talk_mode", v), 30).pack(side="left")
+        rt = self.srow(c, "Voice activation", "With the name on, start with it: “Co-Pilot, gear down”. Saying just the name opens a few "
+                                              "seconds to talk. Keep it on if you use speakers or chat on Discord.")
+        wk = tk.BooleanVar(value=s.get("va_wake", True))
+        check(rt, f"Only when I say its name ({s.get('assistant_name', 'Co-Pilot')} or Computer)", wk,
+              lambda: self.set_and_save("va_wake", bool(wk.get()))).pack(anchor="w")
+        rt = self.srow(c, "Voice activation sensitivity", "Lower it if it triggers on background noise, raise it if it misses you.")
+        chooser(rt, VA.SENSITIVITY_CHOICES, s.get("va_sensitivity", "medium"), lambda v: self.set_and_save("va_sensitivity", v),
+                30).pack(side="left")
         rt = self.srow(c, "Push-to-talk", "Any key, mouse button, controller or joystick button.")
         self.ptt_set_lbl = label(rt, s.get("ptt", {}).get("name", "not set"), "h2", "accent")
         self.ptt_set_lbl.pack(side="left")
@@ -1904,7 +1944,7 @@ class App:
         save_settings(self.settings)
 
         def go():
-            self.transcriber.load(self.settings.get("stt_model", "base.en"), dev)
+            self.transcriber.load(self.settings.get("stt_model", "base.en"), dev, self.settings.get("language", "en"))
             self.settings.pop("stt_pending", None)
             save_settings(self.settings)
         threading.Thread(target=go, daemon=True).start()
@@ -1946,8 +1986,28 @@ class App:
                 self.ui(("rerender_settings", None))
         threading.Thread(target=go, daemon=True, name="kokoro-dl").start()
 
+    def set_language(self, lang):
+        """Switch the language it listens and answers in, and pick a voice that speaks it. Runs off the main thread."""
+        voices = V.edge_voice_list(EDGE_CACHE, lang=lang) or V.edge_voice_list(EDGE_CACHE, refresh=True, lang=lang)
+        self.ui(("call", lambda: self.apply_language(lang, voices)))
+
+    def apply_language(self, lang, voices):
+        self.settings["language"] = lang
+        self.edge_voices = voices
+        ids = {v for v, _ in voices}
+        if self.settings.get("voice") not in ids:
+            want = V.DEFAULT_VOICE.get(lang)
+            self.settings["voice"] = want if want in ids or not voices else voices[0][0]
+        if lang != "en" and self.settings.get("tts_engine") == "kokoro":
+            self.settings["tts_engine"] = "neural"
+        save_settings(self.settings)
+        self.speaker.clear()
+        self.load_stt()
+        if "settings" in self.frames:
+            self.settings_frame.swap(self.render_settings)
+
     def refresh_edge_voices(self, rerender=True):
-        voices = V.edge_voice_list(EDGE_CACHE, refresh=True)
+        voices = V.edge_voice_list(EDGE_CACHE, refresh=True, lang=self.settings.get("language", "en"))
         if voices:
             self.edge_voices = voices
         if rerender:
@@ -2645,10 +2705,38 @@ class App:
         self.speaker.chirp("done")
         threading.Thread(target=self.handle_audio, args=(audio, t_release), daemon=True).start()
 
-    def handle_audio(self, audio, t_release=None):
+    def va_busy(self):
+        sp = getattr(self, "speaker", None)
+        return bool(self.listening or self.thinking or self.va_handling or (sp is not None and sp.speaking))
+
+    def va_hearing(self, on):
+        self.va_hearing_on = on
+
+    def va_heard(self, audio):
+        self.va_handling = True
+
+        def go():
+            try:
+                self.handle_audio(audio, time.time(), hands_free=True)
+            finally:
+                self.va_handling = False
+        threading.Thread(target=go, daemon=True, name="va-heard").start()
+
+    def wake_filter(self, text):
+        """Voice activation with the name required: the words after the name, "" if only the name was said, or None to ignore."""
+        name = self.settings.get("assistant_name", "Co-Pilot")
+        rest = self.wake.check(text, name, self.settings.get("va_wake", True))
+        if rest is None and time.time() - self.last_ignored > 60:
+            self.last_ignored = time.time()
+            self.ui(("tool", f"heard “{text}” without “{name}” first, so I ignored it. Start with “{name}”, "
+                             f"or turn off “Only when I say its name” in Settings."))
+        return rest
+
+    def handle_audio(self, audio, t_release=None, hands_free=False):
         t_release = t_release or time.time()
         if audio is None or len(audio) < V.Recorder.RATE * 0.35:
-            self.ui(("sys", "Too short. Hold the button the whole time you're talking."))
+            if not hands_free:
+                self.ui(("sys", "Too short. Hold the button the whole time you're talking."))
             return
         if self.transcriber.model is None:
             self.ui(("sys", f"Speech model isn't ready: {self.transcriber.status}"))
@@ -2663,11 +2751,32 @@ class App:
             return
         if len(text.strip(" .,!?")) < 2:
             self.thinking = False
-            self.ui(("sys", "Didn't catch that."))
-            self.speaker.chirp("error")
+            if not hands_free:
+                self.ui(("sys", "Didn't catch that."))
+                self.speaker.chirp("error")
             return
+        if hands_free:
+            text = self.wake_filter(text)
+            if not text:
+                self.thinking = False
+                if text == "":
+                    self.ui(("tool", "listening…"))
+                    self.speaker.chirp("listen")
+                return
+            self.speaker.chirp("done")
         stt = time.time() - t_release
         if self.settings.get("instant_commands", True):
+            tcmd = TM.parse_command(text, self.settings.get("assistant_name", "Co-Pilot"))
+            if tcmd and self.run_timer(tcmd, text):
+                self.thinking = False
+                return
+            mcmd = MEM.parse_command(text, self.settings.get("assistant_name", "Co-Pilot"))
+            if mcmd:
+                self.thinking = False
+                self.ui(("you", text))
+                self.say_now(self.remember_fact(mcmd["fact"]) if mcmd["op"] == "remember" else
+                             self.forget_fact(mcmd["fact"]) if mcmd["op"] == "forget" else MEM.recall(self.settings))
+                return
             cmd = Q.parse(text, self.settings.get("assistant_name", "Co-Pilot"), self.settings.get("macros"))
             if cmd:
                 self.ui(("you", text))
@@ -2675,6 +2784,65 @@ class App:
                 self.run_quick(cmd, t_release, stt)
                 return
         self.ask(text, t_release=t_release, stt=stt)
+
+    def remember_fact(self, fact):
+        saved, say = MEM.add(self.settings, fact)
+        if saved:
+            save_settings(self.settings)
+            self.ui(("tool", f"remembered: {saved}"))
+            self.ui(("memories", None))
+        return say
+
+    def forget_fact(self, fact):
+        gone, say = MEM.forget(self.settings, fact)
+        if gone:
+            save_settings(self.settings)
+            self.ui(("tool", f"forgot: {gone}"))
+            self.ui(("memories", None))
+        return say
+
+    def timer_line(self, key, item=None, seconds=None):
+        label = (item or {}).get("label") or ""
+        text = LN.line(self.settings, key, time=TM.spoken(seconds or (item or {}).get("seconds", 0)),
+                       label=(label[0].upper() + label[1:] + ".") if label else "")
+        return " ".join(text.split())
+
+    def set_timer(self, seconds, label=""):
+        """Start a timer and return what to say (also used by the AI)."""
+        try:
+            item = self.timers.add(seconds, label)
+        except ValueError as ex:
+            return str(ex)
+        return self.timer_line("timer_set", item)
+
+    def cancel_timers(self, label=""):
+        hit = self.timers.cancel(label)
+        if not hit:
+            return f"No {label} timer running." if label else "No timers running."
+        if len(hit) == 1:
+            return self.timer_line("timer_cancel", hit[0])
+        return f"Cancelled {len(hit)} timers."
+
+    def run_timer(self, cmd, text):
+        """Handle a spoken timer command. Returns False to let the AI take it instead."""
+        if cmd["op"] == "list" and not cmd.get("explicit") and not self.timers.find():
+            return False
+        self.ui(("you", text))
+        if cmd["op"] == "set":
+            say = self.set_timer(cmd["seconds"], cmd["label"])
+        elif cmd["op"] == "cancel":
+            say = self.cancel_timers(cmd["label"])
+        else:
+            say = self.timers.describe(cmd["label"])
+        self.say_now(say)
+        return True
+
+    def check_timers(self):
+        for item in self.timers.due():
+            say = self.timer_line("timer_done", item)
+            self.ui(("copilot", say))
+            self.speaker.say(say, priority=True, force=True)
+            self.overlay.set_callout(say)
 
     def run_quick(self, cmd, t_release=None, stt=0.0):
         if cmd["kind"] == "macro":
@@ -2980,7 +3148,7 @@ class App:
                 pass
 
     def avatar_activity(self):
-        if self.listening:
+        if self.listening or self.va_hearing_on:
             return "listen", 0.0
         sp = getattr(self, "speaker", None)
         if sp is not None and sp.speaking:
@@ -3002,6 +3170,14 @@ class App:
                     self.toast(item[1])
                 elif item[0] == "trade":
                     self.show_trade(item[1])
+                elif item[0] == "memories":
+                    box = getattr(self, "mem_box", None)
+                    try:
+                        if box is not None and box.winfo_exists() and self.root.focus_get() is not box:
+                            box.delete("1.0", "end")
+                            box.insert("1.0", "\n".join(MEM.items(self.settings)))
+                    except tk.TclError:
+                        pass
                 elif item[0] == "kprog":
                     try:
                         self.kokoro_lbl.config(text=f"  Downloading… {item[1] * 100:.0f}%")
@@ -3024,12 +3200,15 @@ class App:
                 elif time.time() - self.capture_started > 12:
                     self.finish_capture(None)
             self.update_header()
+            if time.time() - self.timer_t >= 1.0:
+                self.timer_t = time.time()
+                self.check_timers()
             if self.tab in self.DATA_TABS:
                 self.render(self.tab)
             if time.time() - self._ov_t > 0.4:
                 self._ov_t = time.time()
-                status = "● Listening…" if self.listening else "Thinking…" if self.thinking else ""
-                self.overlay.update(self.state, status, force=time.time() < self.overlay_test_until)
+                status = "● Listening…" if self.listening or self.va_hearing_on else "Thinking…" if self.thinking else ""
+                self.overlay.update(self.state, status, force=time.time() < self.overlay_test_until, timers=self.timers.rows())
                 if time.time() < self.overlay_test_until and time.time() - self.overlay_diag_t >= 1.0:
                     self.overlay_diag_t = time.time()
                     print(f"[{time.strftime('%H:%M:%S')}] overlay-test {self.overlay.report()}", flush=True)
@@ -3049,6 +3228,7 @@ class App:
         except Exception:
             pass
         self.watcher.stop_flag = True
+        self.va.stop()
         self.speaker.stop()
         self.overlay.destroy()
         self.root.destroy()

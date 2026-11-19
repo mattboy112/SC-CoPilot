@@ -11,6 +11,8 @@ import sc_lines as LN
 import sc_macros as MAC
 import sc_version as VER
 import sc_vision as VIS
+import sc_memory as MEM
+from sc_voice import LANGUAGE_NAMES
 from sc_binds import ACTION_INDEX, ACTIONS
 from sc_log import ago, clean_item, clean_place, hm
 
@@ -73,6 +75,22 @@ TOOLS = [
 ]
 
 
+MEMORY_TOOLS = [
+    {"name": "remember", "description": "Save a lasting fact the pilot asks you to remember (their ships, org, playstyle, preferences). It stays in your instructions from then on.",
+     "input_schema": {"type": "object", "properties": {"fact": {"type": "string", "description": "One short sentence, in the pilot's words."}},
+                      "required": ["fact"]}},
+    {"name": "forget", "description": "Remove the saved fact that best matches, or everything if the pilot says so.",
+     "input_schema": {"type": "object", "properties": {"fact": {"type": "string"}}, "required": ["fact"]}},
+]
+TIMER_TOOLS = [
+    {"name": "set_timer", "description": "Start a countdown timer that speaks up when it runs out and shows on the overlay. Use for refinery jobs, mission deadlines, cooldowns or any reminder.",
+     "input_schema": {"type": "object", "properties": {
+         "minutes": {"type": "number", "description": "Length in minutes (1.5 = 90 seconds, 180 = 3 hours). Up to 4320."},
+         "label": {"type": "string", "description": "Short name, e.g. refinery or bounty. Empty if none."}}, "required": ["minutes"]}},
+    {"name": "list_timers", "description": "The running timers and how long each has left.", "input_schema": {"type": "object", "properties": {}}},
+    {"name": "cancel_timer", "description": "Cancel timers whose name contains the label, or all timers when the label is empty.",
+     "input_schema": {"type": "object", "properties": {"label": {"type": "string"}}}},
+]
 LOOK_TOOL = {"name": "look_at_screen", "description": "Take a screenshot of Star Citizen and look at it: the HUD, cockpit screens (MFDs), prompts and what's in view. Use it to check power, engines, landing gear, shields, quantum status, or anything the pilot asks you to look at or confirm.",
              "input_schema": {"type": "object", "properties": {}}}
 MAX_SHOTS_PER_TURN = 2
@@ -551,6 +569,10 @@ class Brain:
 
     def _tools(self):
         tools = TOOLS + TRADE_TOOLS + INFO_TOOLS
+        if getattr(self.app, "timers", None) is not None:
+            tools = tools + TIMER_TOOLS
+        if getattr(self.app, "remember_fact", None) is not None:
+            tools = tools + MEMORY_TOOLS
         mt = macro_tool(self.app.settings.get("macros") or [])
         if mt:
             tools = tools + [mt]
@@ -570,6 +592,11 @@ class Brain:
         notes = (s.get("pilot_notes") or "").strip()
         system = SYSTEM.format(name=s.get("assistant_name", "Co-Pilot"), handle=st.handle or "the pilot",
                                notes=f"\n\nWhat the pilot has told you about themselves: {notes}" if notes else "")
+        system += MEM.as_prompt(s)
+        lang = LANGUAGE_NAMES.get(s.get("language", "en"), "English")
+        if lang != "English":
+            system += (f"\n\nAlways answer in {lang}, whatever language the live status or tool results are in. Keep game names, "
+                       f"ship names and place names as they are.")
         style = LN.ai_style(s)
         if style:
             system += f"\n\nPersonality: {style} Stay accurate and keep answers short; the personality is only how you say things."
@@ -734,6 +761,20 @@ class Brain:
         if name == "find_keybind":
             rows = self.app.binds.search(inp.get("query", ""))
             return json.dumps({"results": rows, "keys_from": self.app.binds.source}) if rows else "No action matched. Try another word."
+        if name == "remember":
+            return self.app.remember_fact(str(inp.get("fact") or ""))
+        if name == "forget":
+            return self.app.forget_fact(str(inp.get("fact") or ""))
+        if name == "set_timer":
+            try:
+                secs = float(inp.get("minutes", 0)) * 60
+            except (TypeError, ValueError):
+                return "Give the length in minutes."
+            return self.app.set_timer(int(round(secs)), str(inp.get("label") or ""))
+        if name == "list_timers":
+            return self.app.timers.as_tool_text()
+        if name == "cancel_timer":
+            return self.app.cancel_timers(str(inp.get("label") or ""))
         if name == "look_at_screen":
             shot, why = self.app.look()
             if not shot:

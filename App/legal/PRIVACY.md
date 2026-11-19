@@ -6,7 +6,8 @@ SC Co-Pilot runs on your PC. It has no account system, no analytics and no track
 
 - Star Citizen's `Game.log` and log backups, for the dashboard, history and callouts.
 - Your keybinds file (`actionmaps.xml`) and the game's default keybinds inside `Data.p4k`, so it can press the right keys.
-- Your microphone, **only while you hold push-to-talk**. Speech recognition runs on your PC. Audio is never uploaded.
+- Your microphone: **only while you hold push-to-talk**, or all the time if you turn on voice activation. Either way, speech recognition runs on your PC and audio is never uploaded or saved. With voice activation, anything you say that doesn't start with the co-pilot's name is thrown away (unless you turn that check off).
+- Notes you ask it to remember and your timers are saved in your settings folder on your PC.
 - If you set up the target reader: the small screen areas you drew boxes around, a few times a second at most. The pixels are analysed on your PC and never saved or sent.
 
 ## What leaves your PC, and only when you use the feature

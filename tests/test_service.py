@@ -27,6 +27,8 @@ def test_format_account():
     assert "3 of 200 smart replies" in BR.format_account(cap)
     trial = {"plan_name": "Free trial", "resets_at": None, "usage": {"replies": 12, "web": 1}, "limits": {"replies": 100, "web": 5}}
     assert BR.format_account(trial) == "Free trial · 12 of 100 trial replies used · 1 of 5 web lookups"
+    free = {"plan_name": "Free", "resets_at": "2026-12-01T00:00:00Z", "usage": {"replies": 7, "web": 0}, "limits": {"replies": 50, "web": 3}}
+    assert BR.format_account(free) == "Free · 7 of 50 replies this month · 0 of 3 web lookups · resets Dec 1"
     assert BR.format_account(None) == ""
 
 

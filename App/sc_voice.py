@@ -75,38 +75,51 @@ def kokoro_voice_list(names=None):
     return out
 
 
-def edge_voice_list(cache_file, refresh=False):
-    """All English Microsoft neural voices. Cached to disk; refresh pulls the live list."""
+LANGUAGES = [("en", "English"), ("de", "Deutsch (German)"), ("fr", "Français (French)"), ("es", "Español (Spanish)"),
+             ("it", "Italiano (Italian)"), ("pt", "Português (Portuguese)"), ("nl", "Nederlands (Dutch)")]
+LANGUAGE_NAMES = {"en": "English", "de": "German", "fr": "French", "es": "Spanish", "it": "Italian", "pt": "Portuguese", "nl": "Dutch"}
+DEFAULT_VOICE = {"en": "en-GB-RyanNeural", "de": "de-DE-ConradNeural", "fr": "fr-FR-HenriNeural", "es": "es-ES-AlvaroNeural",
+                 "it": "it-IT-DiegoNeural", "pt": "pt-BR-AntonioNeural", "nl": "nl-NL-MaartenNeural"}
+
+
+def _locale(short_name):
+    return "-".join(short_name.split("-")[:2])
+
+
+def _voice_label(short_name, locale, gender):
+    nm = short_name.split("-", 2)[-1].replace("Neural", "")
+    for word in ("Multilingual", "Expressive", "Turbo"):
+        nm = nm.replace(word, " " + word)
+    return f"{nm.strip()} ({locale.split('-', 1)[-1]}, {gender.lower()})"
+
+
+def edge_voice_list(cache_file, refresh=False, lang="en"):
+    """Microsoft neural voices for one language. Every language is cached to disk at once; refresh pulls the live list."""
+    rows = None
     if not refresh:
         try:
             data = json.loads(Path(cache_file).read_text(encoding="utf-8"))
-            if data:
-                return [tuple(x) for x in data]
-        except (OSError, ValueError):
-            pass
-        if not refresh:
-            return list(VOICES)
-    try:
-        import edge_tts
-        voices = asyncio.run(asyncio.wait_for(edge_tts.list_voices(), timeout=15))
-    except Exception:
-        return list(VOICES)
-    out = []
-    for v in voices:
-        sn, loc = v.get("ShortName", ""), v.get("Locale", "")
-        if not loc.startswith("en-"):
-            continue
-        nm = sn.split("-", 2)[-1].replace("Neural", "")
-        for word in ("Multilingual", "Expressive", "Turbo"):
-            nm = nm.replace(word, " " + word)
-        out.append((sn, f"{nm.strip()} ({loc[3:]}, {v.get('Gender', '').lower()})"))
-    out.sort(key=lambda x: (x[1].split("(")[1], x[1]))
-    if out:
+            rows = [(x[0], x[1], x[2] if len(x) > 2 else _locale(x[0])) for x in data if x]
+        except (OSError, ValueError, IndexError, TypeError):
+            rows = None
+    if rows is None and refresh:
         try:
-            Path(cache_file).write_text(json.dumps(out), encoding="utf-8")
-        except OSError:
-            pass
-    return out or list(VOICES)
+            import edge_tts
+            voices = asyncio.run(asyncio.wait_for(edge_tts.list_voices(), timeout=15))
+            rows = [(v.get("ShortName", ""), _voice_label(v.get("ShortName", ""), v.get("Locale", ""), v.get("Gender", "")),
+                     v.get("Locale", "")) for v in voices if v.get("ShortName") and v.get("Locale")]
+            if rows:
+                try:
+                    Path(cache_file).write_text(json.dumps(rows), encoding="utf-8")
+                except OSError:
+                    pass
+        except Exception:
+            rows = None
+    out = [(sn, label) for sn, label, loc in (rows or []) if loc.split("-")[0] == lang]
+    out.sort(key=lambda x: (x[1].split("(")[1], x[1]))
+    if not out and lang == "en":
+        return list(VOICES)
+    return out
 
 
 class Kokoro:
@@ -525,12 +538,17 @@ class Transcriber:
         self.status = "not loaded"
         self.size = None
         self.device = None
+        self.language = "en"
         self.lock = threading.Lock()
 
     def available(self):
         return np is not None and importlib.util.find_spec("faster_whisper") is not None
 
-    def load(self, size="base.en", device="cpu"):
+    def load(self, size="base.en", device="cpu", language="en"):
+        """English uses the faster English-only models; other languages need the multilingual one of the same size."""
+        self.language = language if language in LANGUAGE_NAMES else "en"
+        if self.language != "en":
+            size = size.replace(".en", "")
         with self.lock:
             if self.model is not None and self.size == size and self.device == device:
                 return
@@ -548,7 +566,7 @@ class Transcriber:
                 try:
                     threads = min(8, max(4, (os.cpu_count() or 8) // 2))
                     m = WhisperModel(size, device=dev, compute_type=ct, download_root=str(self.models_dir), cpu_threads=threads)
-                    segs, _ = m.transcribe(np.zeros(16000, dtype=np.float32), language="en", beam_size=1)
+                    segs, _ = m.transcribe(np.zeros(16000, dtype=np.float32), language=self.language, beam_size=1)
                     list(segs)
                     self.model = m
                     self.size = size
@@ -563,8 +581,9 @@ class Transcriber:
         with self.lock:
             if self.model is None:
                 raise RuntimeError("Speech model isn't loaded yet.")
-            segs, _ = self.model.transcribe(audio.astype(np.float32), language="en", beam_size=1,
-                                            initial_prompt=self.PROMPT, vad_filter=False, without_timestamps=True,
+            lang = getattr(self, "language", "en")
+            segs, _ = self.model.transcribe(audio.astype(np.float32), language=lang, beam_size=1,
+                                            initial_prompt=self.PROMPT if lang == "en" else None, vad_filter=False, without_timestamps=True,
                                             condition_on_previous_text=False)
             return " ".join(s.text.strip() for s in segs).strip()
 

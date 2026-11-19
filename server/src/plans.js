@@ -2,7 +2,7 @@ export const STANDARD_MODEL = "claude-haiku-5-5";
 export const SMART_MODEL = "claude-sonnet-5-5";
 
 export const TIERS = {
-  trial: { name: "Free trial", replies: 100, web: 5, smart: 0, daily: 100, perMinute: 8, costCap: 0.25, lifetime: true },
+  trial: { name: "Free", replies: 50, web: 3, smart: 0, daily: 25, perMinute: 6, costCap: 0.1, free: true },
   pilot: { name: "Pilot", replies: 2000, web: 50, smart: 0, daily: 300, perMinute: 12, costCap: 2.5 },
   captain: { name: "Captain", replies: 5000, web: 150, smart: 200, daily: 600, perMinute: 15, costCap: 5.0 },
 };

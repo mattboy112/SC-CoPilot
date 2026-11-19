@@ -32,7 +32,7 @@ Whoever gets into one of these accounts gets your money or your users' trust, so
    |---|---|---|
    | SC Co-Pilot Pilot | $3.99 monthly, $35.99 yearly | License key ("Pilot key") |
    | SC Co-Pilot Captain | $7.99 monthly, $71.99 yearly | License key ("Captain key"), Discord role |
-   | SC Co-Pilot Free Trial | Free, one time | License key ("Trial key") |
+   | SC Co-Pilot Free | Free (no card) | License key ("Free key") |
 
    License key settings: no expiry, no activation limit (the service limits each key to 3 PCs itself). For the subscriptions, the key is revoked automatically when the subscription ends.
 3. Copy each license-key **benefit ID**.
@@ -56,14 +56,14 @@ npx wrangler d1 create sc-copilot
 [vars]
 LICENSE_PROVIDER = "polar"
 POLAR_ORG_ID = "your organization ID"
-TIER_MAP = '{"pilot benefit id":"pilot","captain benefit id":"captain","trial benefit id":"trial"}'
+TIER_MAP = '{"pilot benefit id":"pilot","captain benefit id":"captain","free benefit id":"trial"}'
 MANAGE_URL = "your Polar customer portal link"
 UPGRADE_URL = "your checkout link"
 DAILY_BUDGET_USD = "25"
 TRIAL_DAILY_USD = "3"
 ```
 
-`DAILY_BUDGET_USD` pauses the whole service for the rest of the day (UTC) if total AI spend passes it. `TRIAL_DAILY_USD` does the same for free trials only, so nobody can farm trial keys. Raise the daily budget to about twice your normal daily spend as you grow.
+`DAILY_BUDGET_USD` pauses the whole service for the rest of the day (UTC) if total AI spend passes it. `TRIAL_DAILY_USD` does the same for the Free plan only, so nobody can farm free keys. Raise the daily budget to about twice your normal daily spend as you grow.
 
 Then create the database tables, add the secrets and deploy:
 
@@ -92,8 +92,8 @@ Commit, tag a release, and the "Co-Pilot subscription" option in the app switche
 
 ## 5. Test it end to end
 
-1. Buy the Free Trial in Polar yourself. You'll get a trial key by email.
-2. In the app: Settings → AI mode → Co-Pilot subscription, paste the key, press Save. "Your plan" should show "Free trial · 0 of 100 trial replies used".
+1. Get the Free plan in Polar yourself. You'll get a free key by email.
+2. In the app: Settings → AI mode → Co-Pilot subscription, paste the key, press Save. "Your plan" should show "Free · 0 of 50 replies this month · 0 of 3 web lookups · resets …".
 3. Ask it something in game. The count goes up.
 
 ## If something leaks
@@ -132,12 +132,12 @@ npx wrangler d1 execute sc-copilot --remote --command "SELECT period, COUNT(*) A
 
 Rules it enforces, per key:
 
-- Monthly replies, web lookups and smart (Sonnet) replies, by plan. The trial is a one-time allowance.
+- Monthly replies, web lookups and smart (Sonnet) replies, by plan. The Free plan gets 50 replies and 3 web lookups a month, refilled on the 1st, with a 10¢ monthly cost ceiling.
 - A daily cap, a per-minute cap, two questions in flight at once at most, and a monthly cost ceiling, so one runaway script can't run up a bill.
 - One question counts once, however many tool round trips it takes. Every request also counts toward a hidden cap (3 per reply in the plan), so faking tool round trips can't dodge the limits. A follow-up only counts as part of the same question if it carries nothing but tool results for tool calls the service itself saw, each usable once.
 - Web search is removed from the request when the month's lookups are used up, so the AI still answers without searching.
 - Requests for other models are switched to the plan's model. Huge requests are refused. Before a question goes out, it reserves its worst-case cost, counting every web search pass (each one re-reads the whole prompt plus the results so far) and Haiku 5.5's 5x price above 100,000 tokens. The real cost replaces the reservation when the answer finishes.
-- A key works on up to 3 PCs used in the last 30 days. Each PC can use one free trial, ever, with at most 3 new trials a day per home network.
+- A key works on up to 3 PCs used in the last 30 days. Each PC can have one Free plan key, with at most 3 new free keys a day per home network, and all free use together stops for the day at `TRIAL_DAILY_USD`.
 - Usage is counted before the question goes to Anthropic, and the cost is read from a copy of the answer, so hanging up early doesn't make a question free.
 
 Safety rules, for everyone:

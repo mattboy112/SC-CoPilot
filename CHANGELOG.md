@@ -20,6 +20,11 @@ First public release.
 - Ask what ships you can buy: by system, type (fighter, heavy fighter, cargo, mining...), dealer or budget, with the dealer and price. "Ship dealers in Stanton" works too.
 - The AI stays in character as your ship's AI: answers first, in a sentence or two, with no disclaimers or talk about where it got the information.
 - Knows the ship's state (gear, NAV/SCM, power, lights, doors and more) from its own commands and your own key presses, so it doesn't undo things by repeating them. Forgets when you change ships.
+- Voice activation, free for everyone: talk hands-free by starting with its name ("Co-Pilot, gear down"). Saying just the name opens a few seconds to talk. It ignores itself while speaking, learns your room's background noise, and drops bangs and hums before they're transcribed. Settings → How you talk to it.
+- Timers: "set a 3 hour refinery timer", "how long left on the timer", "cancel the timer". Countdown on the overlay, spoken alert, survives restarts. The AI can set them too.
+- "Remember that": "remember my main ship is a Cutlass Black", "forget the Cutlass", "what do you remember?". Notes are editable in Settings and the AI uses them in every answer.
+- Seven languages: English, German, French, Spanish, Italian, Portuguese and Dutch for listening and answers, with matching Microsoft voices.
+- Co-Pilot Free plan replaces the one-time trial: 50 AI replies and 3 web lookups every month, no card, one per PC.
 - Screen checks: after pre-flight the co-pilot takes a screenshot to make sure power and engines really came on, and fixes it once if not. If it remembers being flight ready, it looks before saying so. The AI can also look at the game when you ask "are my engines on?" or "what does that screen say?". Uses one AI reply per check; screenshots are never saved.
 - Quantum fixed for Star Citizen 4.10: "quantum mode" switches to NAV, "engage quantum" switches to NAV if needed and holds the engage button, and it tells you when no destination is set.
 - AI avatar on the overlay: a glowing core in a cloud of points that reacts when you talk, while it thinks, and to the loudness of its voice.
@@ -28,4 +33,4 @@ First public release.
 - Security (subscription service): requests are rebuilt from scratch so only what the app sends gets through, every request reserves its worst-case cost first, two questions in flight per key at most, usage is counted even if a request is cut off, one free trial per PC, daily spending brakes, throttled key guessing and floods, and no raw keys, PC IDs, full emails or request logs stored.
 - New logo, shown on the taskbar, window, desktop shortcut, installer and website.
 - First-run setup, automatic updates, Copy diagnostics for bug reports.
-- 349 automated app tests and 50 service checks, including attack attempts, run on every change.
+- 420 automated app tests and 50 service checks, including attack attempts, run on every change.

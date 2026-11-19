@@ -2,7 +2,7 @@
 
 **A voice co-pilot and live dashboard for Star Citizen.**
 
-Hold push-to-talk and say "gear down", "combat ready" or "target the biggest threat", and it presses your own keybinds. Ask "where do I sell Laranite near me?" or "what's my objective?" and it answers out loud using your real game data and live community prices. It calls out armistice zones, jurisdiction changes, kills, contracts and party joins. A small overlay in game shows your zone, objective and the last callout.
+Hold push-to-talk, or turn on voice activation and just say "Co-Pilot, gear down", and it presses your own keybinds. It remembers what your ship is doing and checks your HUD to make sure. Ask "where do I sell Laranite near me?" or "what's my objective?" and it answers out loud using your real game data and live community prices. It calls out armistice zones, jurisdiction changes, kills, contracts and party joins. A small overlay in game shows your zone, objective and the last callout.
 
 > Unofficial fan-made tool. Not affiliated with, endorsed by or sponsored by Cloud Imperium Games or Roberts Space Industries.
 
@@ -21,6 +21,11 @@ It checks for updates by itself and installs them in one click (Settings → Abo
 ## What it does
 
 - **Instant voice commands, free and offline.** Speech recognition runs on your PC. Simple commands are matched on your PC too, so they fire right away with no AI delay. Say it however you like: "drop the gear", "guns hot", "kill the lights", "pop flares", "all power to shields", "next hostile", "who's shooting me".
+- **Hands-free voice activation, free.** No button needed: say its name first ("Co-Pilot, lights on"). It never listens to itself, and push-to-talk keeps working.
+- **Knows your ship and checks itself.** It remembers gear, power, lights and doors so it won't repeat a toggle. After pre-flight it takes a screenshot of your HUD, and fixes it if the engines didn't come on. Ask "are my engines on?" and it looks before answering.
+- **Timers.** "Set a 3 hour refinery timer." It counts down on the overlay, survives a restart and tells you when it's done.
+- **Remembers you.** "Remember my main ship is a Cutlass Black." Notes are listed in Settings, where you can edit them.
+- **Seven languages.** Listen and answer in English, German, French, Spanish, Italian, Portuguese or Dutch.
 - **Voice macros.** One phrase runs a sequence of keys: "prep for takeoff", "combat ready", "go dark", "evasive", "landing prep". Make your own on the Macros tab.
 - **An AI co-pilot (optional).** Answers questions about your session ("how many kills this week?", "what did I spend today?"), finds places ("where can I refuel near me?", "does Checkmate have a refinery?"), finds ships and gear for sale, plans trade routes, and handles anything that isn't an instant command.
 - **Callouts.** Spoken alerts for armistice, ungoverned space, monitored space, quantum arrival, kills, losses, CrimeStat, contracts, party and aUEC transfers.
@@ -39,7 +44,7 @@ The AI is optional. Everything above except answering questions works without it
 | Mode | How it works |
 |---|---|
 | **Your own Anthropic API key** | Make a key at [platform.claude.com](https://platform.claude.com/) and add a few dollars of credit. You pay Anthropic directly, roughly a tenth of a cent per question with the default model. |
-| **Co-Pilot subscription** | *Coming soon.* A monthly plan, no key or Anthropic account needed. |
+| **Co-Pilot plans** | *Coming soon.* Free AI replies every month with no card, plus low-cost plans for more. No key or Anthropic account needed. |
 | **Off** | Instant commands, macros, callouts, dashboard, trade and overlay all still work. |
 
 ## Voices

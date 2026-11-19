@@ -301,16 +301,19 @@ async function main() {
       assert.equal(p.headers.get("x-copilot-notice"), "smart-not-in-plan");
     });
 
-    await check("trial is a one-time allowance", async () => {
+    await check("the free plan is a monthly allowance that refills", async () => {
       for (const q of ["a", "b"]) {
         await (await ask("TRIAL-KEY", q)).text();
         await sleep(250);
       }
       const r = await ask("TRIAL-KEY", "c");
       assert.equal(r.status, 429);
-      assert.match((await r.json()).error.message, /free trial/);
+      const body = await r.json();
+      assert.match(body.error.message, /this month's 2 free AI replies\. They refill on the 1st/);
+      assert.ok(body.error.resets_at, "it says when it refills");
       const a = await account("TRIAL-KEY");
-      assert.equal(a.body.resets_at, null);
+      assert.equal(a.body.plan_name, "Free");
+      assert.ok(a.body.resets_at && a.body.period.match(/^\d{4}-\d{2}$/));
     });
 
     await check("a key works on 3 PCs, not a 4th", async () => {
@@ -569,20 +572,20 @@ async function main() {
       assert.ok(row.cost_micro >= 161, `cost ${row.cost_micro}`);
     });
 
-    await check("SECURITY: one free trial per PC, and a daily cap on all trials", async () => {
+    await check("SECURITY: one free plan per PC, and a daily cap on all free use", async () => {
       const same = await ask("TRIAL-KEY-2", "hi");
       assert.equal(same.status, 403);
-      assert.match((await same.json()).error.message, /already used a free trial/);
+      assert.match((await same.json()).error.message, /already has a free plan/);
       const other = await ask("TRIAL-KEY-2", "hi", {}, { "x-copilot-device": pc(77) });
       assert.equal(other.status, 200);
       await other.text();
       await sleep(400);
       const paused = await ask("TRIAL-KEY-2", "again", {}, { "x-copilot-device": pc(77) });
       assert.equal(paused.status, 503);
-      assert.match((await paused.json()).error.message, /trials are paused/);
+      assert.match((await paused.json()).error.message, /Free AI replies are paused/);
       const farm = await ask("TRIAL-KEY-3", "hi", {}, { "x-copilot-device": pc(78) });
       assert.equal(farm.status, 403);
-      assert.match((await farm.json()).error.message, /Too many free trials from your network/);
+      assert.match((await farm.json()).error.message, /Too many new free plans from your network/);
     });
 
     await check("SECURITY: Anthropic billing errors aren't shown to players", async () => {

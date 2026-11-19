@@ -134,10 +134,11 @@ async function authorize(req, env) {
         `This key is already in use on ${MAX_DEVICES} PCs this month. One subscription covers your own PCs only.`),
     };
   }
-  if (tier.lifetime) {
+  if (tier.free || tier.lifetime) {
     const owner = await S.trialOwner(env.DB, device);
+    const taken = "This PC already has a free plan on another key. Use that key, or subscribe for more replies.";
     if (owner && owner !== hash) {
-      return { error: fail(403, "permission_error", "This PC has already used a free trial. Subscribe to keep the AI going.") };
+      return { error: fail(403, "permission_error", taken) };
     }
     if (!owner) {
       const net = await networkTag(req, env, "trialnet");
@@ -145,10 +146,10 @@ async function authorize(req, env) {
       const perNet = num(env.TRIALS_PER_NETWORK, TRIALS_PER_NETWORK_DAY);
       const [n64, n48] = [await S.bump(env.DB, net, now, 86400000), await S.bump(env.DB, wide, now, 86400000)];
       if (n64 > perNet || n48 > perNet * TRIALS_WIDE_FACTOR) {
-        return { error: fail(403, "permission_error", "Too many free trials from your network today. Try again tomorrow, or subscribe.") };
+        return { error: fail(403, "permission_error", "Too many new free plans from your network today. Try again tomorrow, or subscribe.") };
       }
       if (!(await S.addTrial(env.DB, device, hash, now))) {
-        return { error: fail(403, "permission_error", "This PC has already used a free trial. Subscribe to keep the AI going.") };
+        return { error: fail(403, "permission_error", taken) };
       }
     }
   }
@@ -232,7 +233,7 @@ async function messages(req, env, ctx) {
   const now = new Date(a.now);
   const period = S.periodKey(a.tier, now);
   const day = S.dayKey(now);
-  const trial = !!a.tier.lifetime;
+  const trial = !!(a.tier.free || a.tier.lifetime);
   const [u, d, all, trials, cont] = await Promise.all([
     S.getUsage(env.DB, a.keyHash, period),
     S.getUsage(env.DB, a.keyHash, day),
@@ -271,13 +272,15 @@ async function messages(req, env, ctx) {
   const quota = (message, resetsAt) => fail(429, "quota_exceeded", message, { resets_at: resetsAt, plan: a.tierId });
   const monthly = a.tier.lifetime
     ? "Your free trial replies are used up. Subscribe to keep the AI going."
-    : `You've used all ${a.tier.replies} AI replies this month.`;
+    : a.tier.free
+      ? `You've used this month's ${a.tier.replies} free AI replies. They refill on the 1st, or subscribe for more.`
+      : `You've used all ${a.tier.replies} AI replies this month.`;
   const capMicro = Math.round(a.tier.costCap * 1e6);
   const dailyMsg = `That's today's limit of ${a.tier.daily} AI replies. It resets at midnight UTC.`;
   const budgetMicro = Math.round((num(env.DAILY_BUDGET_USD, DAILY_BUDGET_USD) || DAILY_BUDGET_USD) * 1e6);
   const trialMicro = Math.round(num(env.TRIAL_DAILY_USD, TRIAL_DAILY_USD) * 1e6);
   const pausedMsg = "The Co-Pilot service has hit its daily safety limit. It'll be back tomorrow.";
-  const trialsMsg = "Free trials are paused for today. Try again tomorrow, or subscribe.";
+  const trialsMsg = "Free AI replies are paused for today because lots of people are using them. Try again tomorrow, or subscribe.";
 
   if (u.cost_micro + reserved > capMicro) return quota("You've reached this month's Co-Pilot limit.", resets);
   if (u.calls >= a.tier.replies * CALLS_PER_REPLY) return quota(monthly, resets);

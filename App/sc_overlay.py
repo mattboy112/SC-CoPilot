@@ -168,7 +168,7 @@ class Overlay:
     """Small always-on-top, click-through HUD. Shows over Star Citizen when the game runs in Borderless Windowed mode.
     It's created once and then only faded in and out, so it never grabs focus from the game."""
 
-    ROWS = ("chips", "ship", "objective", "qt", "callout")
+    ROWS = ("chips", "ship", "objective", "qt", "timers", "callout")
 
     def __init__(self, root, get_settings, game_window=None, get_activity=None):
         self.root = root
@@ -223,7 +223,8 @@ class Overlay:
         wrap = int(440 * scale)
         self.rows = {"chips": tk.Frame(frame, bg=PANEL)}
         for key, font, color in (("ship", self._font(int(10 * scale)), DIM), ("objective", self._font(int(11 * scale), True), INK),
-                                 ("qt", self._font(int(10 * scale)), DIM), ("callout", self._font(int(10 * scale)), ACCENT)):
+                                 ("qt", self._font(int(10 * scale)), DIM), ("timers", self._font(int(10 * scale), True), WARN),
+                                 ("callout", self._font(int(10 * scale)), ACCENT)):
             self.rows[key] = tk.Label(frame, text="", font=font, fg=color, bg=PANEL, anchor="w", justify="left", wraplength=wrap)
         for i, key in enumerate(self.ROWS):
             self.rows[key].grid(row=i, column=0, sticky="w", pady=(0, int(2 * scale)))
@@ -307,7 +308,7 @@ class Overlay:
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
 
-    def update(self, state, status="", force=False):
+    def update(self, state, status="", force=False, timers=()):
         s = self.get_settings()
         want = force or (bool(s.get("overlay_on", False)) and (state.running or not s.get("overlay_only_in_game", True)))
         if not want:
@@ -347,17 +348,20 @@ class Overlay:
                     qt = f"QT ▸ {clean_place(state.qt_target)} · {st}"
         ctext, cts = self.callout
         call = status or (f"“{ctext}”" if ctext and now - cts < float(s.get("overlay_callout_secs", 8)) else "")
-        if not (chips or ship or obj or qt or call):
+        tim = "   ".join(f"⏱ {name} {left}" for name, left in (timers or ()))
+        if not (chips or ship or obj or qt or call or tim):
             ship = "SC Co-Pilot"
-        sig = (tuple(chips), ship, obj, qt, call)
+        sig = (tuple(chips), ship, obj, qt, tim, call)
         if sig != self.last_sig:
+            chips_changed = self.last_sig is None or self.last_sig[0] != sig[0]
             self.last_sig = sig
-            for w in self.rows["chips"].winfo_children():
-                w.destroy()
-            for text, color in chips:
-                tk.Label(self.rows["chips"], text=text, font=self.tiny, fg=color, bg=CHIP, padx=6, pady=1).pack(side="left", padx=(0, 4))
-            vals = {"chips": bool(chips), "ship": ship, "objective": obj, "qt": qt, "callout": call}
-            for key in ("ship", "objective", "qt", "callout"):
+            if chips_changed:
+                for w in self.rows["chips"].winfo_children():
+                    w.destroy()
+                for text, color in chips:
+                    tk.Label(self.rows["chips"], text=text, font=self.tiny, fg=color, bg=CHIP, padx=6, pady=1).pack(side="left", padx=(0, 4))
+            vals = {"chips": bool(chips), "ship": ship, "objective": obj, "qt": qt, "timers": tim, "callout": call}
+            for key in ("ship", "objective", "qt", "timers", "callout"):
                 self.rows[key].config(text=vals[key])
             self.rows["callout"].config(fg=BAD if status.startswith("●") else ACCENT)
             for key in self.ROWS:

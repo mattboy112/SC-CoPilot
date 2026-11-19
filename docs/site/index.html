@@ -98,9 +98,9 @@ footer p{max-width:80ch;margin:0}
 <section class="hero">
   <div class="wrap">
     <div>
-      <span class="eyebrow">Free for Windows · Fan-made</span>
+      <span class="eyebrow">Free for Windows · Built only for Star Citizen</span>
       <h1>Your voice co-pilot for Star Citizen.</h1>
-      <p class="lead">Hold a button and talk to your ship. It presses your own keybinds, calls out what's happening around you, and answers questions using your live game data and community prices.</p>
+      <p class="lead">Talk to your ship, hands-free or with a button. It presses your own keybinds, remembers what your ship is doing, checks the HUD to make sure, calls out what's happening around you, and answers questions using your live game data and community prices.</p>
       <div class="cta">
         <a class="btn primary dl" href="https://github.com/mattboy112/SC-CoPilot/releases/latest">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3v11.2l4.6-4.6 1.4 1.4-7 7-7-7 1.4-1.4 4.6 4.6V3h2zM4 19h16v2H4z"/></svg>
@@ -126,6 +126,18 @@ footer p{max-width:80ch;margin:0}
   </div>
 </section>
 
+<section>
+  <div class="wrap">
+    <h2>Built for Star Citizen, not bolted on.</h2>
+    <p class="sub">No profiles to import or keybinds to copy. Install it, pick a voice, and fly.</p>
+    <div class="grid">
+      <div class="card"><h3>Your keybinds, read for you</h3><p>It reads your own Star Citizen bindings, so “gear down” presses whatever you've set. It can fill in actions the game leaves unbound, and backs up your file first.</p></div>
+      <div class="card"><h3>Knows your ship</h3><p>It remembers whether your gear, power, lights and doors are on, so it never flips something you already did. After pre-flight it looks at your HUD and fixes it if the engines didn't come on.</p></div>
+      <div class="card"><h3>Hands-free, for free</h3><p>Turn on voice activation and just say “Co-Pilot, gear down”. No button, no paid plan. Push-to-talk keeps working too.</p></div>
+    </div>
+  </div>
+</section>
+
 <section id="features">
   <div class="wrap">
     <h2>Everything a co-pilot should do.</h2>
@@ -140,6 +152,9 @@ footer p{max-width:80ch;margin:0}
       <div class="card"><h3>In-game overlay</h3><p>A small click-through panel with your zone, current objective, quantum status and the last callout.</p></div>
       <div class="card"><h3>Trade &amp; mining prices</h3><p>Live player-reported prices from UEX: best place to sell, best place to buy, and routes for your cargo size.</p></div>
       <div class="card"><h3>Dashboard &amp; history</h3><p>Contracts and objectives, combat log, and 30 days of session history: kills, deaths, jumps and spending.</p></div>
+      <div class="card"><h3>Screen checks</h3><p>It can look at the game to check itself. Ask “are my engines on?” or “what does that screen say?” and it takes a quick screenshot before answering.</p></div>
+      <div class="card"><h3>Timers</h3><p>“Set a 3 hour refinery timer.” It counts down on the overlay, keeps going if you restart, and tells you when it's done.</p></div>
+      <div class="card"><h3>Remembers you</h3><p>“Remember my main ship is a Cutlass Black.” Your notes stay in Settings where you can edit them, and it uses them in every answer.</p></div>
     </div>
   </div>
 </section>
@@ -187,7 +202,7 @@ footer p{max-width:80ch;margin:0}
     <p class="sub">Instant commands, macros, callouts, the overlay and trade prices all work without it.</p>
     <table>
       <tr><th>Your own Anthropic key</th><td>Make a key at platform.claude.com and add a few dollars of credit. You pay Anthropic directly, roughly a tenth of a cent per question with the default model.</td></tr>
-      <tr><th>Co-Pilot subscription <span class="tag">soon</span></th><td>A monthly plan with no key or Anthropic account needed.</td></tr>
+      <tr><th>Co-Pilot plans <span class="tag">soon</span></th><td>Free AI replies every month with no card, plus low-cost plans for more. No key or Anthropic account needed.</td></tr>
       <tr><th>Off</th><td>Everything except answering questions still works.</td></tr>
     </table>
   </div>
@@ -199,7 +214,7 @@ footer p{max-width:80ch;margin:0}
     <div class="steps" style="margin-top:28px">
       <div class="card"><h3>Download &amp; install</h3><p>Run the installer. It installs just for you, no admin needed. Windows may say it protected your PC because the installer isn't code-signed yet: click <b>More info → Run anyway</b>.</p></div>
       <div class="card"><h3>Quick setup</h3><p>Pick your push-to-talk button, your mic, a voice and whether to use the AI. It finds your Star Citizen folder by itself.</p></div>
-      <div class="card"><h3>Talk to your ship</h3><p>Hold push-to-talk in game and say “gear down”. It updates itself when new versions come out.</p></div>
+      <div class="card"><h3>Talk to your ship</h3><p>Hold push-to-talk and say “gear down”, or turn on voice activation and say “Co-Pilot, gear down”. It updates itself when new versions come out.</p></div>
     </div>
   </div>
 </section>
@@ -208,11 +223,12 @@ footer p{max-width:80ch;margin:0}
   <div class="wrap">
     <h2>Questions.</h2>
     <details><summary>Does it work with Easy Anti-Cheat?</summary><p>It doesn't read or change the game's memory and doesn't inject anything. It reads the log file the game writes to disk, and presses keys the way your keyboard does, only when you ask. It is not approved or endorsed by Cloud Imperium, so use your own judgement.</p></details>
-    <details><summary>Does it cost anything?</summary><p>The app is free. The optional AI uses your own Anthropic API key, billed by Anthropic per question (roughly a tenth of a cent each with the default model). A subscription option is coming.</p></details>
-    <details><summary>What does it send over the internet?</summary><p>Only what a feature needs, when you use it: your question to the AI, price lookups to UEX, text to Microsoft for their online voices, and update checks to GitHub. Your microphone is only recorded while you hold push-to-talk, and speech recognition runs on your PC. <a href="https://github.com/mattboy112/SC-CoPilot/blob/main/App/legal/PRIVACY.md">Full privacy details</a>.</p></details>
+    <details><summary>Does it cost anything?</summary><p>The app is free, including voice activation. The optional AI uses your own Anthropic API key, billed by Anthropic per question (roughly a tenth of a cent each with the default model). Co-Pilot plans are coming, with free AI replies every month and low-cost plans for more.</p></details>
+    <details><summary>What does it send over the internet?</summary><p>Only what a feature needs, when you use it: your question to the AI, price lookups to UEX, text to Microsoft for their online voices, and update checks to GitHub. Speech recognition runs on your PC. With push-to-talk, the mic is only used while you hold the button. With voice activation, it listens on your PC all the time, but only what you say after its name goes anywhere. Screen checks send a screenshot of the game to the AI and nothing is saved. <a href="https://github.com/mattboy112/SC-CoPilot/blob/main/App/legal/PRIVACY.md">Full privacy details</a>.</p></details>
     <details><summary>Will it mess up my keybinds?</summary><p>No. It reads your binds and presses what you've set. It can give spare keys to actions Star Citizen leaves unbound, like separate gear up and gear down, but only when you click it, and it backs up your bindings file first.</p></details>
     <details><summary>Does it work with a HOTAS or joystick?</summary><p>Yes. Push-to-talk can be any key, mouse button, controller or joystick button.</p></details>
-    <details><summary>Why can't it see my own shields or fuel?</summary><p>Star Citizen doesn't write them to its log file. The target reader is the one exception: it reads your target's shields and hull from boxes you draw on your HUD.</p></details>
+    <details><summary>Does it speak other languages?</summary><p>Yes. It can listen and answer in English, German, French, Spanish, Italian, Portuguese or Dutch, with Microsoft voices for each. Instant commands and callouts are in English, but you can rewrite every line or install a community line pack.</p></details>
+    <details><summary>Why can't it read my own shields or fuel from the log?</summary><p>Star Citizen doesn't write them to its log file. It can look at your screen instead: the target reader reads your target's shields and hull, and screen checks let the AI look at your HUD when you ask.</p></details>
   </div>
 </section>
 

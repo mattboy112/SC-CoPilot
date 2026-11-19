@@ -54,6 +54,11 @@ CALLOUTS = [
         ("overlay_off", "Overlay off", "Overlay off.", ""),
         ("macro_busy", "Macro already running", "A macro's already running.", ""),
     ]),
+    ("Timers", [
+        ("timer_set", "Timer set", "Timer set for {time}. {label}", "{time} {label}"),
+        ("timer_done", "Timer finished", "Timer's up. {label}", "{label}"),
+        ("timer_cancel", "Timer cancelled", "Timer cancelled. {label}", "{label}"),
+    ]),
 ]
 
 
