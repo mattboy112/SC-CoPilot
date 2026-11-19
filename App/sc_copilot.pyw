@@ -817,6 +817,7 @@ class App:
         label(rc, "TRY SAYING", "label", "muted").pack(anchor="w", pady=(px(16), px(4)))
         for ex in ("“Drop the gear.”  “Kill the lights.”  “Guns hot.”", "“Target the biggest threat.”  “Who's shooting me?”",
                    "“Prep for takeoff.”  “Combat ready.”  “Evasive.”", "“All power to shields.”  “Pop flares.”",
+                   "“Engines on, VTOL on.”  “Gear down and lights on.”",
                    "“Where can I refuel near me?”", "“Where do I buy a Cutlass Black in game?”", "“Where can I buy an FR-76 shield?”",
                    "“Best refinery for Quantainium?”", "“Where do I sell Hadanite near me?”"):
             label(rc, ex, "small", "text", wraplength=px(240), justify="left").pack(anchor="w", pady=px(1))
@@ -857,12 +858,7 @@ class App:
         if not t:
             return
         self.say_entry.delete(0, "end")
-        cmd = Q.parse(t, self.settings.get("assistant_name", "Co-Pilot"), self.settings.get("macros")) \
-            if self.settings.get("instant_commands", True) else None
-        if cmd:
-            self.ui(("you", t))
-            threading.Thread(target=self.run_quick, args=(cmd,), daemon=True).start()
-        else:
+        if not self.try_instant(t):
             self.ask(t)
 
     # ------------------------------------------------------------------ controls tab
@@ -2019,9 +2015,9 @@ class App:
         if self.macro_running:
             self.speaker.say(LN.line(self.settings, "macro_busy"), priority=True)
             return
+        self.macro_running = True
 
         def go():
-            self.macro_running = True
             try:
                 if m.get("say"):
                     self.ui(("copilot", m["say"]))
@@ -2765,25 +2761,36 @@ class App:
                 return
             self.speaker.chirp("done")
         stt = time.time() - t_release
-        if self.settings.get("instant_commands", True):
-            tcmd = TM.parse_command(text, self.settings.get("assistant_name", "Co-Pilot"))
-            if tcmd and self.run_timer(tcmd, text):
-                self.thinking = False
-                return
-            mcmd = MEM.parse_command(text, self.settings.get("assistant_name", "Co-Pilot"))
-            if mcmd:
-                self.thinking = False
-                self.ui(("you", text))
-                self.say_now(self.remember_fact(mcmd["fact"]) if mcmd["op"] == "remember" else
-                             self.forget_fact(mcmd["fact"]) if mcmd["op"] == "forget" else MEM.recall(self.settings))
-                return
-            cmd = Q.parse(text, self.settings.get("assistant_name", "Co-Pilot"), self.settings.get("macros"))
-            if cmd:
-                self.ui(("you", text))
-                self.thinking = False
-                self.run_quick(cmd, t_release, stt)
-                return
+        if self.try_instant(text, t_release, stt):
+            self.thinking = False
+            return
         self.ask(text, t_release=t_release, stt=stt)
+
+    def try_instant(self, text, t_release=None, stt=0.0):
+        """Handle what was said on the PC with no AI: timers, notes, and one or more controls. False means ask the AI."""
+        if not self.settings.get("instant_commands", True):
+            return False
+        name = self.settings.get("assistant_name", "Co-Pilot")
+        tcmd = TM.parse_command(text, name)
+        if tcmd and self.run_timer(tcmd, text):
+            return True
+        mcmd = MEM.parse_command(text, name)
+        if mcmd:
+            self.ui(("you", text))
+            self.say_now(self.remember_fact(mcmd["fact"]) if mcmd["op"] == "remember" else
+                         self.forget_fact(mcmd["fact"]) if mcmd["op"] == "forget" else MEM.recall(self.settings))
+            return True
+        cmds = Q.parse_many(text, name, self.settings.get("macros"))
+        if not cmds:
+            return False
+        self.ui(("you", text))
+        if len(cmds) > 1:
+            self.run_many(cmds, t_release, stt)
+        elif threading.current_thread() is threading.main_thread():
+            threading.Thread(target=self.run_quick, args=(cmds[0], t_release, stt), daemon=True).start()
+        else:
+            self.run_quick(cmds[0], t_release, stt)
+        return True
 
     def remember_fact(self, fact):
         saved, say = MEM.add(self.settings, fact)
@@ -2844,7 +2851,16 @@ class App:
             self.speaker.say(say, priority=True, force=True)
             self.overlay.set_callout(say)
 
-    def run_quick(self, cmd, t_release=None, stt=0.0):
+    def run_quick(self, cmd, t_release=None, stt=0.0, out=None):
+        """Run one instant command. With out (a list), what it would say is added there instead of spoken, so several
+        commands in one sentence can answer with one line."""
+        def tell(text, problem=False):
+            if out is not None:
+                out.append((text, problem))
+            else:
+                self.ui(("copilot", text))
+                self.speaker.say(text, priority=True)
+
         if cmd["kind"] == "macro":
             self.run_macro(cmd["macro"])
             if t_release:
@@ -2865,8 +2881,7 @@ class App:
                     say = LN.line(self.settings, "target_status", shields=sh, hull=hu)
             else:
                 say = r.get("text", "I can't read the target right now.")
-            self.ui(("copilot", say))
-            self.speaker.say(say, priority=True)
+            tell(say)
             return
         if cmd["kind"] == "overlay":
             on = cmd.get("on")
@@ -2874,12 +2889,14 @@ class App:
             self.settings["overlay_on"] = on
             save_settings(self.settings)
             say = LN.line(self.settings, "overlay_on" if on else "overlay_off")
-            self.ui(("copilot", say))
-            self.speaker.say(say, priority=True)
+            tell(say)
             return
         a = B.ACTION_INDEX[cmd["action"]]
         if a["id"] == "qt_engage":
-            threading.Thread(target=self.quantum_engage, args=(cmd, t_release, stt), daemon=True, name="quantum").start()
+            if out is not None:
+                self.quantum_engage(cmd)
+            else:
+                threading.Thread(target=self.quantum_engage, args=(cmd, t_release, stt), daemon=True, name="quantum").start()
             return
         say = cmd.get("say")
         use, note, ack_id = a, None, None
@@ -2894,8 +2911,7 @@ class App:
                 said = self.ship.describe(key) or "Already done."
                 say = said + " Say it again if I've got that wrong."
                 self.ui(("action", f"{a['label']}: not pressed, it's already like that (toggle would undo it)"))
-                self.ui(("copilot", say))
-                self.speaker.say(say, priority=True)
+                tell(say)
                 return
             already = self.ship.describe(key) if note == "already" else ""
             use, ack_id = B.ACTION_INDEX.get(press_id, a), a["id"]
@@ -2914,12 +2930,35 @@ class App:
         if not ok:
             say = self.press_problem(a, msg)
         if say:
-            self.ui(("copilot", say))
-            self.speaker.say(say, priority=True)
+            tell(say, problem=not ok)
         if t_release:
             self.ui(("tool", f"instant command · heard in {stt:.1f}s · done {time.time() - t_release:.1f}s after you let go"))
         if ok and use["id"] == "flight_ready":
             self.verify_flight(pressed=True)
+
+    def run_many(self, cmds, t_release=None, stt=0.0):
+        """Several instant commands from one sentence, in order, with a short pause between key presses (longer after
+        powering up, so the next control has power), then one combined reply."""
+        def go():
+            said = []
+            for i, cmd in enumerate(cmds):
+                if i:
+                    waited = time.time()
+                    while self.macro_running and time.time() - waited < 30:
+                        time.sleep(0.1)
+                    time.sleep(Q.gap_after(cmds[i - 1]))
+                try:
+                    self.run_quick(cmd, out=said)
+                except Exception as ex:
+                    print(f"[{time.strftime('%H:%M:%S')}] instant command {cmd.get('action') or cmd.get('kind')} failed: {ex}", flush=True)
+                    said.append(("Something went wrong on one of those.", True))
+            text = Q.combine(said)
+            if text:
+                self.ui(("copilot", text))
+                self.speaker.say(text, priority=True)
+            if t_release:
+                self.ui(("tool", f"{len(cmds)} instant commands · heard in {stt:.1f}s · done {time.time() - t_release:.1f}s after you let go"))
+        threading.Thread(target=go, daemon=True, name="multi").start()
 
     def can_press(self, aid):
         a = B.ACTION_INDEX.get(aid)

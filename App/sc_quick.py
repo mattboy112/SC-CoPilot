@@ -248,3 +248,120 @@ def parse(text, name="Co-Pilot", macros=None):
                 hit["fuzzy"] = best[0]
                 return hit
     return None
+
+
+SPLIT = re.compile(r"\s*(?:[,;.!]+|\band then\b|\bthen\b|\band also\b|\balso\b|\band\b|\bplus\b|\bafter that\b|\bfollowed by\b|&)\s*",
+                   re.I)
+MULTI_KINDS = {"press", "macro", "overlay"}
+REPEATABLE = {"decoys", "noise", "target_hostile", "target_subitem", "less_engines"}
+STEP_GAP = 0.35
+SLOW_STEPS = {"flight_ready": 4.0, "power_on": 1.5, "power_toggle": 1.5, "thrusters_on": 1.0, "thrusters_toggle": 1.0}
+MAX_PARTS = 6
+DANGLING = {"on", "off", "up", "down", "in", "out", "to", "and", "then"}
+
+
+def _part_ok(cmd, part):
+    """A piece of a several-command sentence only counts if it clearly says what to do. A bare noun like "shields" would
+    otherwise flip a toggle, and in "max power to weapons and shields" that's not what anyone meant."""
+    if not cmd or cmd.get("kind") not in MULTI_KINDS:
+        return False
+    if cmd.get("kind") == "press" and str(cmd.get("action", "")).endswith("_toggle") and not re.search(r"\b(toggle|switch|flip)\b", part, re.I):
+        return False
+    return not cmd.get("fuzzy")
+
+
+def _segment(words, name, macros, cache, min_words=1):
+    """Split run-together words ("engines on vtol on") into commands that each parse on their own. The most pieces wins,
+    because the matcher is forgiving enough to read "engines on vtol on" as just "engines on"."""
+    n = len(words)
+    if n < 2 or n > 14:
+        return None
+    best = [None] * (n + 1)
+    best[0] = []
+    for i in range(1, n + 1):
+        for j in range(max(0, i - 6), i):
+            if best[j] is None or words[j].lower().strip(".,!") in DANGLING:
+                continue
+            if i - j < min_words:
+                continue
+            seg = " ".join(words[j:i])
+            if seg not in cache:
+                cache[seg] = parse(seg, name, macros)
+            c = cache[seg]
+            if _part_ok(c, seg):
+                cand = best[j] + [c]
+                if best[i] is None or len(cand) > len(best[i]):
+                    best[i] = cand
+    return best[n] if best[n] and len(best[n]) >= 2 else None
+
+
+def parse_many(text, name="Co-Pilot", macros=None):
+    """One or more instant commands from one sentence: "engines on, VTOL on", "gear down and lights on then request landing",
+    or run together like "engines on vtol on". Returns a list of commands in order, or None to let the AI handle it."""
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    multi = None
+    if "?" not in raw and not QUESTION.match(_clean(raw, name)) and \
+            not re.search(r"\b(self ?destruct|eject|bail out|if|unless|while|before|but)\b", raw, re.I):
+        multi = _split_commands(raw, name, macros)
+    if multi and len(multi) >= 2:
+        return multi
+    one = parse(text, name, macros)
+    if one:
+        return [one]
+    return multi or None
+
+
+def _split_commands(raw, name, macros):
+    cache = {}
+    parts = [p.strip() for p in SPLIT.split(raw) if p and p.strip()]
+    parts = [p for p in parts if FILLER.sub(" ", _clean(p, name)).strip()]
+    if not parts:
+        return None
+    tail = re.search(r"\b(on|off|up|down|online|offline)\W*$", parts[-1], re.I)
+    head = re.match(r"\W*(?:turn|switch|flip|power|shut)\s+(on|off|up|down)\b", _clean(parts[0], name), re.I)
+    out = []
+    for part in parts:
+        c = parse(part, name, macros)
+        seg = _segment(part.split(), name, macros, cache, min_words=2 if c else 1)
+        if seg:
+            out.extend(seg)
+            continue
+        if not _part_ok(c, part) and len(parts) > 1:
+            c = _shared(part, tail, head, name, macros)
+        if not _part_ok(c, part) and not (len(parts) == 1 and c):
+            return None
+        out.append(c)
+    deduped = [c for k, c in enumerate(out) if k == 0 or c != out[k - 1] or c.get("action") in REPEATABLE]
+    if not deduped or len(deduped) > MAX_PARTS:
+        return None
+    return deduped
+
+
+def _shared(part, tail, head, name, macros):
+    """"engines and VTOL on": the "on" at the end belongs to both. "turn on the engines and VTOL": so does the start."""
+    if re.search(r"\b(on|off|up|down|online|offline|open|close|lock|unlock)\b", part, re.I):
+        return None
+    tries = ([f"{part} {tail.group(1)}"] if tail else []) + ([f"turn {head.group(1)} {part}"] if head else [])
+    for t in tries:
+        c = parse(t, name, macros)
+        if c and c.get("kind") == "press" and not c.get("fuzzy") and not c.get("action", "").endswith("_toggle"):
+            return c
+    return None
+
+
+def gap_after(cmd):
+    """Seconds to wait after a command before pressing the next one. Powering up takes the game a moment, and a
+    key pressed before the ship has power does nothing."""
+    return SLOW_STEPS.get((cmd or {}).get("action"), STEP_GAP)
+
+
+def combine(said):
+    """One spoken line for several commands. said is a list of (text, problem). Every problem is kept in full; the
+    confirmations are listed, or counted once there are more than three, so five controls aren't five sentences."""
+    oks = list(dict.fromkeys(s.strip() for s, bad in said if s and s.strip() and not bad))
+    bad = list(dict.fromkeys(s.strip() for s, b in said if s and s.strip() and b))
+    if len(oks) > 3:
+        oks = [f"All {len(oks)} done." if not bad else f"{len(oks)} done."]
+    return " ".join(oks + bad)

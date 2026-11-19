@@ -20,7 +20,7 @@ It checks for updates by itself and installs them in one click (Settings → Abo
 
 ## What it does
 
-- **Instant voice commands, free and offline.** Speech recognition runs on your PC. Simple commands are matched on your PC too, so they fire right away with no AI delay. Say it however you like: "drop the gear", "guns hot", "kill the lights", "pop flares", "all power to shields", "next hostile", "who's shooting me".
+- **Instant voice commands, free and offline.** Speech recognition runs on your PC. Simple commands are matched on your PC too, so they fire right away with no AI delay. Say it however you like: "drop the gear", "guns hot", "kill the lights", "pop flares", "all power to shields", "next hostile", "who's shooting me". Chain them in one breath: "engines on, VTOL on" or "gear down and lights on, then request landing".
 - **Hands-free voice activation, free.** No button needed: say its name first ("Co-Pilot, lights on"). It never listens to itself, and push-to-talk keeps working.
 - **Knows your ship and checks itself.** It remembers gear, power, lights and doors so it won't repeat a toggle. After pre-flight it takes a screenshot of your HUD, and fixes it if the engines didn't come on. Ask "are my engines on?" and it looks before answering.
 - **Timers.** "Set a 3 hour refinery timer." It counts down on the overlay, survives a restart and tells you when it's done.

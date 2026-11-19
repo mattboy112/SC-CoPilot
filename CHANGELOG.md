@@ -6,6 +6,7 @@ First public release.
 
 - Instant voice commands for flight, power, shields, weapons, targeting, countermeasures, landing, doors, lights and more, matched on your PC with no AI delay.
 - Voice macros: "prep for takeoff", "combat ready", "go dark", "evasive", "landing prep", plus your own.
+- Several commands in one breath: "engines on, VTOL on", "gear down and lights on, then request landing", "engines and VTOL on". Up to six, pressed in order with a short pause (longer after powering up), and one reply.
 - Optional AI co-pilot: answers questions about your session, places, ships, items, refinery yields and trade, using your own Anthropic API key. Subscription option coming soon.
 - Spoken callouts for zones, quantum travel, combat, contracts, party and aUEC.
 - Dashboard: Overview, Contracts, Combat and 30-day History from the game log.
@@ -33,4 +34,4 @@ First public release.
 - Security (subscription service): requests are rebuilt from scratch so only what the app sends gets through, every request reserves its worst-case cost first, two questions in flight per key at most, usage is counted even if a request is cut off, one free trial per PC, daily spending brakes, throttled key guessing and floods, and no raw keys, PC IDs, full emails or request logs stored.
 - New logo, shown on the taskbar, window, desktop shortcut, installer and website.
 - First-run setup, automatic updates, Copy diagnostics for bug reports.
-- 420 automated app tests and 50 service checks, including attack attempts, run on every change.
+- 459 automated app tests and 50 service checks, including attack attempts, run on every change.
